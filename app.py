@@ -12,10 +12,13 @@ from io import StringIO
 from sklearn.linear_model import LinearRegression
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error, mean_absolute_percentage_error
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVR
+from sklearn.neural_network import MLPRegressor
+from sklearn.ensemble import HistGradientBoostingRegressor
+
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -201,6 +204,17 @@ def train_model(df, model_name):
         lag_model = Pipeline([
             ("rf", RandomForestRegressor(n_estimators=100, random_state=42))
         ])
+    elif model_name == "Neural Network Regressor":
+        lag_model = Pipeline([
+            ("scalar", StandardScaler()),
+            ("mlp", MLPRegressor(hidden_layer_sizes=(150, 50, 10), activation='relu', 
+                                solver='adam', max_iter=300))
+        ])
+    elif model_name == "Histogram Gradient Boosting Regressor":
+        lag_model = Pipeline([
+            ("scalar", StandardScaler()),
+            ("mlp", HistGradientBoostingRegressor(learning_rate=0.01, max_iter=200, max_depth=50))
+        ])
  
     test_model_predict = pd.Series(model.predict(X_test), index=y_test.index)
     combined_residuals = pd.concat([residuals, y_test-test_model_predict])
@@ -216,10 +230,11 @@ def train_model(df, model_name):
     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
     r2   = r2_score(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
-    return y_test, y_pred, rmse, r2, mae
+    mape = mean_absolute_percentage_error(y_test, y_pred)
+    return y_test, y_pred, rmse, r2, mae, mape
  
  
-# ── App layout ────────────────────────────────────────────────────────────────
+# - App layout -
 st.title("NZ Energy Demand Predictor")
 st.caption("Weather-driven electricity demand prediction for New Zealand - Auckland, Wellington, Christchurch")
 st.divider()
@@ -245,17 +260,25 @@ if data_ok:
             "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month",
         },
         "SVR": {
-            "desc": "Captures non-linear interactions between weather variables (degree 2).",
+            "desc": "Prediction of residual using SVR.",
             "features": "Polynomial expansion of weather + time features",
         },
         "KNN (k=10, scaled)": {
-            "desc": "K-Nearest Neighbours regression without feature scaling.",
+            "desc": "Prediction of residual using K-Nearest Neighbours Regression.",
             "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
         },
         "Random Forest Regressor": {
-            "desc": "KNN with StandardScaler — usually outperforms the unscaled version.",
+            "desc": "Prediction of residual using Random Forest Regression.",
             "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
         },
+        "Neural Network Regressor": {
+            "desc": "Prediction of residual using Neural Network Regression Feed Foward.",
+            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
+        },
+        "Histogram Gradient Boosting Regressor": {
+            "desc": "Prediction of residual using Neural Network Regression Feed Foward.",
+            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
+        }
     }
  
     with col_sel:
@@ -272,16 +295,17 @@ if data_ok:
     st.divider()
  
     # Run model
-    y_test, y_pred, rmse, r2, mae = train_model(df, chosen)
+    y_test, y_pred, rmse, r2, mae, mape = train_model(df, chosen)
  
     # Metrics row
     m1, m2, m3 = st.columns(3)
     m1.metric("Model", chosen)
-    m2.metric("RMSE", f"{rmse:,.0f} MWh")
+    m2.metric("RMSE", f"{rmse:,.2f} MWh")
     m3.metric("R² Score", f"{r2:.4f}")
     m1, m2, m3 = st.columns(3)
-    m1.metric("MAE", f"{mae:.4f}")
- 
+    m1.metric("Mean Absolute Error", f"{mae:.2f}")
+    m3.metric("Mean Absolute Percentage Error", f"{mape:,.2f}")
+
     st.divider()
  
     # - PART 2: Prediction Graph -
