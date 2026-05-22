@@ -164,6 +164,17 @@ def make_lag_features(series, lags=[1, 2, 3, 7]):
     df_lags = pd.DataFrame(index=series.index)
     for lag in lags:
         df_lags[f"lag_{lag}"] = series.shift(lag)
+    
+    # Rolling statistics
+    df_lags["rolling_mean_7"]  = series.shift(1).rolling(7).mean()
+    df_lags["rolling_std_7"]   = series.shift(1).rolling(7).std() 
+    df_lags["rolling_min_7"]   = series.shift(1).rolling(7).min()
+    df_lags["rolling_max_7"]   = series.shift(1).rolling(7).max()
+    
+    # Lag difference
+    df_lags["lag_diff_1"] = series.shift(1) - series.shift(2)
+    df_lags["lag_diff_7"] = series.shift(1) - series.shift(8)
+
     return df_lags
 
  
