@@ -182,24 +182,36 @@ def train_model(df, model_name):
     features = ["temp_max_avg", "temp_min_avg", "rain_avg", "is_holiday", "month", "dayofweek"]
     X = df[features]
     y = df["demand"]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    split = int(len(X) * 0.8) # No future data leaks
-    X_train, X_test = X.iloc[:split], X.iloc[split:]
-    y_train, y_test = y.iloc[:split], y.iloc[split:]
-    
-    model = LinearRegression()
-    model.fit(X_train, y_train)
-    train_model_predict = pd.Series(model.predict(X_train), index=y_train.index)
-    residuals = y_train - train_model_predict
-    
-    lag_df = make_lag_features(residuals, lags=[1, 2, 7])
-    lag_df["residual"] = residuals
-    lag_df.dropna(inplace=True) # Drop NA caused by shifting
-    X_lag = lag_df.drop(columns=["residual"])
-    y_lag = lag_df["residual"]
+    X = X.sort_index()
+    y = y.sort_index()
+ 
+    scaler = StandardScaler()
+    X_train_s = scaler.fit_transform(X_train)
+    X_test_s  = scaler.transform(X_test)
 
+    if model_name == "Linear Regression":
+        model = LinearRegression()
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+ 
+    elif model_name == "Time Lagged Prediction":
+        split = int(len(X) * 0.8) # No future data leaks
+        X_train, X_test = X.iloc[:split], X.iloc[split:]
+        y_train, y_test = y.iloc[:split], y.iloc[split:]
+        
+        model = LinearRegression()
+        model.fit(X_train, y_train)
+        train_model_predict = pd.Series(model.predict(X_train), index=y_train.index)
+        residuals = y_train - train_model_predict
+        
+        lag_df = make_lag_features(residuals, lags=[7])
+        lag_df["residual"] = residuals
+        lag_df.dropna(inplace=True) # Drop NA caused by shifting
+        X_lag = lag_df.drop(columns=["residual"])
+        y_lag = lag_df["residual"]
 
-    if model_name == "Time Lagged Prediction":
         lag_model = LinearRegression()
     elif model_name == "SVR":
         lag_model = Pipeline([
@@ -266,6 +278,10 @@ if data_ok:
     col_sel, col_desc = st.columns([1, 2])
  
     MODEL_INFO = {
+        "Linear Regression": {
+            "desc": "Baseline model using temperature & rainfall only.",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, month, dayofweek",
+        },
         "Time Lagged Prediction": {
             "desc": "Prediction of residual using Linear Regression.",
             "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month",
