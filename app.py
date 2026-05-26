@@ -8,22 +8,26 @@ import plotly.express as px
 import plotly.figure_factory as ff
 import scipy.stats as stats
 from io import StringIO
+from functools import reduce
  
 from sklearn.linear_model import LinearRegression
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error, mean_absolute_percentage_error
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVR
+from sklearn.neural_network import MLPRegressor
+from sklearn.ensemble import HistGradientBoostingRegressor
 
-# ── Page config ──────────────────────────────────────────────────────────────
+
+# - Page config -
 st.set_page_config(
     page_title="NZ Energy Demand Predictor",
     layout="wide",
 )
  
-# ── Dark theme CSS ────────────────────────────────────────────────────────────
+# - Dark theme CSS -
 st.markdown("""
 <style>
     /* Main background */
@@ -74,7 +78,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
  
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# - Helpers -
 @st.cache_data(show_spinner="Fetching grid data…")
 def get_grid_data():
     # Load all CSV files
@@ -120,14 +124,23 @@ def build_dataset():
         "akl": f"{base}?latitude=-36.8485&longitude=174.7633&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
         "wlg": f"{base}?latitude=-41.2865&longitude=174.7762&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
         "chc": f"{base}?latitude=-43.5321&longitude=172.6362&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "ham": f"{base}?latitude=-37.7870&longitude=175.2793&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "tau": f"{base}?latitude=-37.6878&longitude=176.1651&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "dun": f"{base}?latitude=-45.8788&longitude=170.5028&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "qtn": f"{base}?latitude=-45.0312&longitude=168.6626&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "rot": f"{base}?latitude=-38.1368&longitude=176.2497&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
     }
+
+
     dfs = [get_weather_data(u, c) for c, u in urls.items()]
-    df_weather = dfs[0].merge(dfs[1], on="date").merge(dfs[2], on="date")
+    df_weather = reduce(lambda left, right: pd.merge(left, right, on="date"), dfs)
  
     # Average weather across cities
-    df_weather["temp_max_avg"] = df_weather[["temp_max_akl","temp_max_wlg","temp_max_chc"]].mean(axis=1)
-    df_weather["temp_min_avg"] = df_weather[["temp_min_akl","temp_min_wlg","temp_min_chc"]].mean(axis=1)
-    df_weather["rain_avg"]     = df_weather[["rain_akl","rain_wlg","rain_chc"]].mean(axis=1)
+    city_codes = list(urls.keys())
+
+    df_weather["temp_max_avg"] = df_weather[[f"temp_max_{c}" for c in city_codes]].mean(axis=1)
+    df_weather["temp_min_avg"] = df_weather[[f"temp_min_{c}" for c in city_codes]].mean(axis=1)
+    df_weather["rain_avg"] = df_weather[[f"rain_{c}" for c in city_codes]].mean(axis=1)
  
     # Cleaning of dataset
     df_elec = get_grid_data()
@@ -161,6 +174,17 @@ def make_lag_features(series, lags=[1, 2, 3, 7]):
     df_lags = pd.DataFrame(index=series.index)
     for lag in lags:
         df_lags[f"lag_{lag}"] = series.shift(lag)
+    
+    # Rolling statistics
+    df_lags["rolling_mean_7"]  = series.shift(1).rolling(7).mean()
+    df_lags["rolling_std_7"]   = series.shift(1).rolling(7).std() 
+    df_lags["rolling_min_7"]   = series.shift(1).rolling(7).min()
+    df_lags["rolling_max_7"]   = series.shift(1).rolling(7).max()
+    
+    # Lag difference
+    df_lags["lag_diff_1"] = series.shift(1) - series.shift(2)
+    df_lags["lag_diff_7"] = series.shift(1) - series.shift(8)
+
     return df_lags
 
  
@@ -168,36 +192,24 @@ def train_model(df, model_name):
     features = ["temp_max_avg", "temp_min_avg", "rain_avg", "is_holiday", "month", "dayofweek"]
     X = df[features]
     y = df["demand"]
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    X = X.sort_index()
-    y = y.sort_index()
- 
-    scaler = StandardScaler()
-    X_train_s = scaler.fit_transform(X_train)
-    X_test_s  = scaler.transform(X_test)
+    split = int(len(X) * 0.8) # No future data leaks
+    X_train, X_test = X.iloc[:split], X.iloc[split:]
+    y_train, y_test = y.iloc[:split], y.iloc[split:]
+    
+    model = LinearRegression()
+    model.fit(X_train, y_train)
+    train_model_predict = pd.Series(model.predict(X_train), index=y_train.index)
+    residuals = y_train - train_model_predict
+    
+    lag_df = make_lag_features(residuals, lags=[1, 2, 7])
+    lag_df["residual"] = residuals
+    lag_df.dropna(inplace=True) # Drop NA caused by shifting
+    X_lag = lag_df.drop(columns=["residual"])
+    y_lag = lag_df["residual"]
 
-    if model_name == "Linear Regression":
-        model = LinearRegression()
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
- 
-    elif model_name == "Time Lagged Prediction":
-        split = int(len(X) * 0.8) # No future data leaks
-        X_train, X_test = X.iloc[:split], X.iloc[split:]
-        y_train, y_test = y.iloc[:split], y.iloc[split:]
-        
-        model = LinearRegression()
-        model.fit(X_train, y_train)
-        train_model_predict = pd.Series(model.predict(X_train), index=y_train.index)
-        residuals = y_train - train_model_predict
-        
-        lag_df = make_lag_features(residuals, lags=[7])
-        lag_df["residual"] = residuals
-        lag_df.dropna(inplace=True) # Drop NA caused by shifting
-        X_lag = lag_df.drop(columns=["residual"])
-        y_lag = lag_df["residual"]
 
+    if model_name == "Time Lagged Prediction":
         lag_model = LinearRegression()
     elif model_name == "SVR":
         lag_model = Pipeline([
@@ -212,6 +224,17 @@ def train_model(df, model_name):
     elif model_name == "Random Forest Regressor":
         lag_model = Pipeline([
             ("rf", RandomForestRegressor(n_estimators=100, random_state=42))
+        ])
+    elif model_name == "Neural Network Regressor":
+        lag_model = Pipeline([
+            ("scalar", StandardScaler()),
+            ("mlp", MLPRegressor(hidden_layer_sizes=(150, 50, 10), activation='relu', 
+                                solver='adam', max_iter=300))
+        ])
+    elif model_name == "Histogram Gradient Boosting Regressor":
+        lag_model = Pipeline([
+            ("scalar", StandardScaler()),
+            ("mlp", HistGradientBoostingRegressor(learning_rate=0.01, max_iter=200, max_depth=50))
         ])
  
     test_model_predict = pd.Series(model.predict(X_test), index=y_test.index)
@@ -228,10 +251,11 @@ def train_model(df, model_name):
     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
     r2   = r2_score(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
-    return y_test, y_pred, rmse, r2, mae
+    mape = mean_absolute_percentage_error(y_test, y_pred)
+    return y_test, y_pred, rmse, r2, mae, mape
  
  
-# ── App layout ────────────────────────────────────────────────────────────────
+# - App layout -
 st.title("NZ Energy Demand Predictor")
 st.caption("Weather-driven electricity demand prediction for New Zealand - Auckland, Wellington, Christchurch")
 st.divider()
@@ -252,26 +276,30 @@ if data_ok:
     col_sel, col_desc = st.columns([1, 2])
  
     MODEL_INFO = {
-        "Linear Regression": {
-            "desc": "Baseline model using temperature & rainfall only.",
-            "features": "temp_max_avg, temp_min_avg, rain_avg, month, dayofweek",
-        },
         "Time Lagged Prediction": {
             "desc": "Prediction of residual using Linear Regression.",
             "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month",
         },
         "SVR": {
-            "desc": "Captures non-linear interactions between weather variables (degree 2).",
+            "desc": "Prediction of residual using SVR.",
             "features": "Polynomial expansion of weather + time features",
         },
         "KNN (k=10, scaled)": {
-            "desc": "K-Nearest Neighbours regression without feature scaling.",
+            "desc": "Prediction of residual using K-Nearest Neighbours Regression.",
             "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
         },
         "Random Forest Regressor": {
-            "desc": "KNN with StandardScaler — usually outperforms the unscaled version.",
+            "desc": "Prediction of residual using Random Forest Regression.",
             "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
         },
+        "Neural Network Regressor": {
+            "desc": "Prediction of residual using Neural Network Regression Feed Foward.",
+            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
+        },
+        "Histogram Gradient Boosting Regressor": {
+            "desc": "Prediction of residual using Neural Network Regression Feed Foward.",
+            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
+        }
     }
  
     with col_sel:
@@ -288,16 +316,17 @@ if data_ok:
     st.divider()
  
     # Run model
-    y_test, y_pred, rmse, r2, mae = train_model(df, chosen)
+    y_test, y_pred, rmse, r2, mae, mape = train_model(df, chosen)
  
     # Metrics row
     m1, m2, m3 = st.columns(3)
     m1.metric("Model", chosen)
-    m2.metric("RMSE", f"{rmse:,.0f} MWh")
+    m2.metric("RMSE", f"{rmse:,.2f} MWh")
     m3.metric("R² Score", f"{r2:.4f}")
     m1, m2, m3 = st.columns(3)
-    m1.metric("MAE", f"{mae:.4f}")
- 
+    m1.metric("Mean Absolute Error", f"{mae:.2f}")
+    m3.metric("Mean Absolute Percentage Error", f"{mape:,.2f}")
+
     st.divider()
  
     # - PART 2: Prediction Graph -
@@ -526,6 +555,11 @@ if data_ok:
         "temp_max_akl", "temp_min_akl", "rain_akl",
         "temp_max_wlg", "temp_min_wlg", "rain_wlg",
         "temp_max_chc", "temp_min_chc", "rain_chc",
+        "temp_max_ham", "temp_min_ham", "rain_ham",
+        "temp_max_tau", "temp_min_tau", "rain_tau",
+        "temp_max_dun", "temp_min_dun", "rain_dun",
+        "temp_max_qtn", "temp_min_qtn", "rain_qtn",
+        "temp_max_rot", "temp_min_rot", "rain_rot",
     ]
     df_show = df[[c for c in display_cols if c in df.columns]].copy()
     df_show.index = df_show.index.date   # clean date display
