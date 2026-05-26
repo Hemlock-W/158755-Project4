@@ -196,8 +196,37 @@ def train_model(df, model_name):
     split = int(len(X) * 0.8) # No future data leaks
     X_train, X_test = X.iloc[:split], X.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
-    
     model = LinearRegression()
+
+    if model_name == "Time Lagged Prediction":
+        lag_model = LinearRegression()
+    elif model_name == "SVR":
+        lag_model = Pipeline([
+            ("scalar", StandardScaler()),
+            ("svr", SVR(kernel="rbf", C=100, epsilon=0.01))
+        ])
+    elif model_name == "KNN (k=10, scaled)":
+        model = lag_model = Pipeline([
+            ("scalar", StandardScaler()),
+            ("knn", KNeighborsRegressor(n_neighbors=10))
+        ])
+    elif model_name == "Random Forest Regressor":
+        model = lag_model = Pipeline([
+            ("rf", RandomForestRegressor(n_estimators=100, random_state=42))
+        ])
+    elif model_name == "Neural Network Regressor":
+        lag_model = Pipeline([
+            ("scalar", StandardScaler()),
+            ("mlp", MLPRegressor(hidden_layer_sizes=(150, 50, 10), activation='relu', 
+                                solver='adam', max_iter=300))
+        ])
+    elif model_name == "Histogram Gradient Boosting Regressor":
+        model = lag_model = Pipeline([
+            ("scalar", StandardScaler()),
+            ("hgbr", HistGradientBoostingRegressor(learning_rate=0.01, max_iter=200, max_depth=50))
+        ])
+    
+    
     model.fit(X_train, y_train)
     train_model_predict = pd.Series(model.predict(X_train), index=y_train.index)
     residuals = y_train - train_model_predict
@@ -208,34 +237,6 @@ def train_model(df, model_name):
     X_lag = lag_df.drop(columns=["residual"])
     y_lag = lag_df["residual"]
 
-
-    if model_name == "Time Lagged Prediction":
-        lag_model = LinearRegression()
-    elif model_name == "SVR":
-        lag_model = Pipeline([
-            ("scalar", StandardScaler()),
-            ("svr", SVR(kernel="rbf", C=100, epsilon=0.01))
-        ])
-    elif model_name == "KNN (k=10, scaled)":
-        lag_model = Pipeline([
-            ("scalar", StandardScaler()),
-            ("knn", KNeighborsRegressor(n_neighbors=10))
-        ])
-    elif model_name == "Random Forest Regressor":
-        lag_model = Pipeline([
-            ("rf", RandomForestRegressor(n_estimators=100, random_state=42))
-        ])
-    elif model_name == "Neural Network Regressor":
-        lag_model = Pipeline([
-            ("scalar", StandardScaler()),
-            ("mlp", MLPRegressor(hidden_layer_sizes=(150, 50, 10), activation='relu', 
-                                solver='adam', max_iter=300))
-        ])
-    elif model_name == "Histogram Gradient Boosting Regressor":
-        lag_model = Pipeline([
-            ("scalar", StandardScaler()),
-            ("mlp", HistGradientBoostingRegressor(learning_rate=0.01, max_iter=200, max_depth=50))
-        ])
  
     test_model_predict = pd.Series(model.predict(X_test), index=y_test.index)
     combined_residuals = pd.concat([residuals, y_test-test_model_predict])
