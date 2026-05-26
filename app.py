@@ -79,6 +79,25 @@ st.markdown("""
 """, unsafe_allow_html=True)
  
 # - Helpers -
+@st.cache_data(show_spinner="Fetching ECT data…")
+def get_ect_data():
+    ect = pd.read_csv("archive/electronic-card-transactions-january-2026-csv-tables.csv")
+    # Filter to actual (not seasonally adjusted / trend) total-industry spend.
+    # Series_title_3/4/5 may still split by card type, so groupby().sum()
+    # collapses everything to one genuine total per month.
+    ect = ect[
+        (ect["Series_title_2"] == "RTS total industries") &
+        (ect["Series_title_1"] == "Actual")
+    ]
+    ect["Period"] = ect["Period"].astype(str)
+    ect["Year"]   = ect["Period"].str.split(".").str[0].astype(int)
+    ect["Month"]  = ect["Period"].str.split(".").str[1].astype(int)
+    ect = ect[ect["Year"] >= 2023]                                # ← drop pre-2023
+    ect["month"]  = pd.to_datetime(
+        dict(year=ect["Year"], month=ect["Month"], day=1)
+    ).dt.to_period("M")
+    ect = ect[["month", "Data_value"]].rename(columns={"Data_value": "ECT"})
+    return ect.groupby("month", as_index=False)["ECT"].sum()  # 1 row per month
 @st.cache_data(show_spinner="Fetching grid data…")
 def get_grid_data():
     # Load all CSV files
@@ -165,6 +184,14 @@ def build_dataset():
     df_final["month"]      = df_final["date"].dt.month
     df_final["dayofweek"]  = df_final["date"].dt.dayofweek
  
+    # ── ECT: one monthly value repeated for every day in that month ───────────
+    df_ect = get_ect_data()
+    df_final["month_period"] = pd.to_datetime(df_final["date"]).dt.to_period("M")
+    df_ect = df_ect.rename(columns={"month": "month_period"})
+    df_final = df_final.merge(df_ect, on="month_period", how="left")
+    df_final.drop(columns=["month_period"], inplace=True)
+    
+    df_final["ECT"] = df_final["ECT"].ffill().bfill()
     df_final.set_index("date", inplace=True)
     df_final.sort_index(ascending=True, inplace=True)
     return df_final
@@ -189,7 +216,7 @@ def make_lag_features(series, lags=[1, 2, 3, 7]):
 
  
 def train_model(df, model_name):
-    features = ["temp_max_avg", "temp_min_avg", "rain_avg", "is_holiday", "month", "dayofweek"]
+    features = ["temp_max_avg", "temp_min_avg", "rain_avg", "is_holiday", "month", "dayofweek", "ECT"]
     X = df[features]
     y = df["demand"]
 
@@ -279,7 +306,7 @@ if data_ok:
     MODEL_INFO = {
         "Time Lagged Prediction": {
             "desc": "Prediction of residual using Linear Regression.",
-            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, ECT",
         },
         "SVR": {
             "desc": "Prediction of residual using SVR.",
@@ -287,19 +314,19 @@ if data_ok:
         },
         "KNN (k=10, scaled)": {
             "desc": "Prediction of residual using K-Nearest Neighbours Regression.",
-            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
         },
         "Random Forest Regressor": {
             "desc": "Prediction of residual using Random Forest Regression.",
-            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
+            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
         },
         "Neural Network Regressor": {
             "desc": "Prediction of residual using Neural Network Regression Feed Foward.",
-            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
+            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
         },
         "Histogram Gradient Boosting Regressor": {
             "desc": "Prediction of residual using Neural Network Regression Feed Foward.",
-            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
+            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
         }
     }
  
@@ -551,7 +578,7 @@ if data_ok:
     st.header("Dataset")
  
     display_cols = [
-        "demand", "temp_max_avg", "temp_min_avg", "rain_avg",
+        "demand", "ECT", "temp_max_avg", "temp_min_avg", "rain_avg",
         "is_holiday", "month", "dayofweek",
         "temp_max_akl", "temp_min_akl", "rain_akl",
         "temp_max_wlg", "temp_min_wlg", "rain_wlg",
