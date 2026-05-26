@@ -8,6 +8,7 @@ import plotly.express as px
 import plotly.figure_factory as ff
 import scipy.stats as stats
 from io import StringIO
+from functools import reduce
  
 from sklearn.linear_model import LinearRegression
 from sklearn.neighbors import KNeighborsRegressor
@@ -20,13 +21,13 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.ensemble import HistGradientBoostingRegressor
 
 
-# ── Page config ──────────────────────────────────────────────────────────────
+# - Page config -
 st.set_page_config(
     page_title="NZ Energy Demand Predictor",
     layout="wide",
 )
  
-# ── Dark theme CSS ────────────────────────────────────────────────────────────
+# - Dark theme CSS -
 st.markdown("""
 <style>
     /* Main background */
@@ -77,7 +78,36 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
  
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# - Helpers -
+@st.cache_data(show_spinner="Fetching pricing data…")
+def get_pricing_data():
+       pricing = pd.read_csv("archive/Wholesale_price_trends_20260524152740.csv", skiprows=11)
+       pricing['date'] = pd.to_datetime(pricing['Period start'], format='%d/%m/%Y')
+       pricing = pricing[['date', 'Price ($/MWh)']].rename(columns={'Price ($/MWh)': 'price'})
+       pricing = pricing[pricing['date'] >= '2023-01-01']
+       return pricing
+
+
+@st.cache_data(show_spinner="Fetching ECT data…")
+def get_ect_data():
+    ect = pd.read_csv("archive/electronic-card-transactions-january-2026-csv-tables.csv")
+    # Filter to actual (not seasonally adjusted / trend) total-industry spend.
+    # Series_title_3/4/5 may still split by card type, so groupby().sum()
+    # collapses everything to one genuine total per month.
+    ect = ect[
+        (ect["Series_title_2"] == "RTS total industries") &
+        (ect["Series_title_1"] == "Actual")
+    ]
+    ect["Period"] = ect["Period"].astype(str)
+    ect["Year"]   = ect["Period"].str.split(".").str[0].astype(int)
+    ect["Month"]  = ect["Period"].str.split(".").str[1].astype(int)
+    ect = ect[ect["Year"] >= 2023]                                # ← drop pre-2023
+    ect["month"]  = pd.to_datetime(
+        dict(year=ect["Year"], month=ect["Month"], day=1)
+    ).dt.to_period("M")
+    ect = ect[["month", "Data_value"]].rename(columns={"Data_value": "ECT"})
+    return ect.groupby("month", as_index=False)["ECT"].sum()  # 1 row per month
+
 @st.cache_data(show_spinner="Fetching grid data…")
 def get_grid_data():
     # Load all CSV files
@@ -123,14 +153,23 @@ def build_dataset():
         "akl": f"{base}?latitude=-36.8485&longitude=174.7633&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
         "wlg": f"{base}?latitude=-41.2865&longitude=174.7762&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
         "chc": f"{base}?latitude=-43.5321&longitude=172.6362&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "ham": f"{base}?latitude=-37.7870&longitude=175.2793&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "tau": f"{base}?latitude=-37.6878&longitude=176.1651&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "dun": f"{base}?latitude=-45.8788&longitude=170.5028&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "qtn": f"{base}?latitude=-45.0312&longitude=168.6626&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "rot": f"{base}?latitude=-38.1368&longitude=176.2497&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
     }
+
+
     dfs = [get_weather_data(u, c) for c, u in urls.items()]
-    df_weather = dfs[0].merge(dfs[1], on="date").merge(dfs[2], on="date")
+    df_weather = reduce(lambda left, right: pd.merge(left, right, on="date"), dfs)
  
     # Average weather across cities
-    df_weather["temp_max_avg"] = df_weather[["temp_max_akl","temp_max_wlg","temp_max_chc"]].mean(axis=1)
-    df_weather["temp_min_avg"] = df_weather[["temp_min_akl","temp_min_wlg","temp_min_chc"]].mean(axis=1)
-    df_weather["rain_avg"]     = df_weather[["rain_akl","rain_wlg","rain_chc"]].mean(axis=1)
+    city_codes = list(urls.keys())
+
+    df_weather["temp_max_avg"] = df_weather[[f"temp_max_{c}" for c in city_codes]].mean(axis=1)
+    df_weather["temp_min_avg"] = df_weather[[f"temp_min_{c}" for c in city_codes]].mean(axis=1)
+    df_weather["rain_avg"] = df_weather[[f"rain_{c}" for c in city_codes]].mean(axis=1)
  
     # Cleaning of dataset
     df_elec = get_grid_data()
@@ -155,6 +194,21 @@ def build_dataset():
     df_final["month"]      = df_final["date"].dt.month
     df_final["dayofweek"]  = df_final["date"].dt.dayofweek
  
+    # ── ECT: one monthly value repeated for every day in that month ───────────
+    df_ect = get_ect_data()
+    df_final["month_period"] = pd.to_datetime(df_final["date"]).dt.to_period("M")
+    df_ect = df_ect.rename(columns={"month": "month_period"})
+    df_final = df_final.merge(df_ect, on="month_period", how="left")
+    df_final.drop(columns=["month_period"], inplace=True)
+
+    df_final["ECT"] = df_final["ECT"].ffill().bfill()
+
+    # ── PRICING: daily price for each day (BEFORE setting index!) ──────────────
+    df_pricing = get_pricing_data()
+    df_final = df_final.merge(df_pricing, on="date", how="left")
+    df_final["price"] = df_final["price"].ffill().bfill()
+
+    # NOW set index (after all merges are done)
     df_final.set_index("date", inplace=True)
     df_final.sort_index(ascending=True, inplace=True)
     return df_final
@@ -179,7 +233,7 @@ def make_lag_features(series, lags=[1, 2, 3, 7]):
 
  
 def train_model(df, model_name):
-    features = ["temp_max_avg", "temp_min_avg", "rain_avg", "is_holiday", "month", "dayofweek"]
+    features = ["temp_max_avg", "temp_min_avg", "rain_avg", "is_holiday", "month", "dayofweek", "ECT", "price"]
     X = df[features]
     y = df["demand"]
 
@@ -268,7 +322,7 @@ if data_ok:
     MODEL_INFO = {
         "Time Lagged Prediction": {
             "desc": "Prediction of residual using Linear Regression.",
-            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, ECT, price",
         },
         "SVR": {
             "desc": "Prediction of residual using SVR.",
@@ -276,19 +330,19 @@ if data_ok:
         },
         "KNN (k=10, scaled)": {
             "desc": "Prediction of residual using K-Nearest Neighbours Regression.",
-            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
         "Random Forest Regressor": {
             "desc": "Prediction of residual using Random Forest Regression.",
-            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
+            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
         "Neural Network Regressor": {
             "desc": "Prediction of residual using Neural Network Regression Feed Foward.",
-            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
+            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
         "Histogram Gradient Boosting Regressor": {
             "desc": "Prediction of residual using Neural Network Regression Feed Foward.",
-            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek",
+            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         }
     }
  
@@ -540,11 +594,16 @@ if data_ok:
     st.header("Dataset")
  
     display_cols = [
-        "demand", "temp_max_avg", "temp_min_avg", "rain_avg",
+        "demand", "ECT", "price", "temp_max_avg", "temp_min_avg", "rain_avg",
         "is_holiday", "month", "dayofweek",
         "temp_max_akl", "temp_min_akl", "rain_akl",
         "temp_max_wlg", "temp_min_wlg", "rain_wlg",
         "temp_max_chc", "temp_min_chc", "rain_chc",
+        "temp_max_ham", "temp_min_ham", "rain_ham",
+        "temp_max_tau", "temp_min_tau", "rain_tau",
+        "temp_max_dun", "temp_min_dun", "rain_dun",
+        "temp_max_qtn", "temp_min_qtn", "rain_qtn",
+        "temp_max_rot", "temp_min_rot", "rain_rot",
     ]
     df_show = df[[c for c in display_cols if c in df.columns]].copy()
     df_show.index = df_show.index.date   # clean date display
@@ -570,4 +629,140 @@ if data_ok:
     # Summary statistics toggle
     with st.expander("Summary Statistics"):
         st.dataframe(df_show.describe().T.style.format(precision=2), use_container_width=True)
+
+
+    # PRICING ANALYSIS
+    
+    st.divider()
+    st.header("Electricity Pricing Analysis")
+    st.caption("Relationship between demand and wholesale electricity prices")
+    
+    # Prepare data for visualization
+    df_viz = df.reset_index()
+    df_viz = df_viz[['date', 'demand', 'price']].dropna()
+    
+    # Summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Avg Price", f"${df_viz['price'].mean():.2f}/MWh")
+    
+    with col2:
+        st.metric("Min Price", f"${df_viz['price'].min():.2f}/MWh")
+    
+    with col3:
+        st.metric("Max Price", f"${df_viz['price'].max():.2f}/MWh")
+    
+    with col4:
+        correlation = df_viz['demand'].corr(df_viz['price'])
+        st.metric("Demand-Price Correlation", f"{correlation:.3f}")
+    
+    # Graph 1: Demand vs Price over time
+    st.subheader("Demand and Price Trends Over Time")
+    
+    fig1 = go.Figure()
+    
+    # demand line
+    fig1.add_trace(go.Scatter(
+        x=df_viz['date'],
+        y=df_viz['demand'],
+        name='Demand (MWh)',
+        line=dict(color='#58a6ff', width=2),
+        yaxis='y1'
+    ))
+    
+    # price line
+    fig1.add_trace(go.Scatter(
+        x=df_viz['date'],
+        y=df_viz['price'],
+        name='Price ($/MWh)',
+        line=dict(color='#f85149', width=2),
+        yaxis='y2'
+    ))
+    
+    fig1.update_layout(
+        xaxis=dict(title='Date'),
+        yaxis=dict(
+            title=dict(text='Demand (MWh)', font=dict(color='#58a6ff')),
+            tickfont=dict(color='#58a6ff')
+        ),
+        yaxis2=dict(
+            title=dict(text='Price ($/MWh)', font=dict(color='#f85149')),
+            tickfont=dict(color='#f85149'),
+            overlaying='y',
+            side='right'
+        ),
+        hovermode='x unified',
+        height=500,
+        template='plotly_dark'
+    )
+    
+    st.plotly_chart(fig1, use_container_width=True)
+    
+    # Graph 2: Scatter plot - Demand vs Price
+    st.subheader("Demand-Price Relationship")
+    
+    fig2 = px.scatter(
+        df_viz,
+        x='demand',
+        y='price',
+        trendline='ols',
+        labels={'demand': 'Demand (MWh)', 'price': 'Price ($/MWh)'},
+        template='plotly_dark'
+    )
+    
+    fig2.update_traces(marker=dict(size=5, opacity=0.6, color='#58a6ff'))
+    fig2.update_layout(height=500)
+    
+    st.plotly_chart(fig2, use_container_width=True)
+    
+    
+    # Monthly analysis
+    st.subheader("Monthly Average Analysis")
+    
+    df_viz['month_name'] = pd.to_datetime(df_viz['date']).dt.strftime('%b %Y')
+    monthly_avg = df_viz.groupby('month_name').agg({
+        'demand': 'mean',
+        'price': 'mean'
+    }).reset_index()
+    
+    # Only showing last 12 months
+    monthly_avg = monthly_avg.tail(12)
+    
+    fig3 = go.Figure()
+    
+    fig3.add_trace(go.Bar(
+        x=monthly_avg['month_name'],
+        y=monthly_avg['demand'],
+        name='Avg Demand',
+        marker_color='#58a6ff',
+        yaxis='y1'
+    ))
+    
+    fig3.add_trace(go.Bar(
+        x=monthly_avg['month_name'],
+        y=monthly_avg['price'],
+        name='Avg Price',
+        marker_color='#f85149',
+        yaxis='y2'
+    ))
+    
+    fig3.update_layout(
+        xaxis=dict(title='Month'),
+        yaxis=dict(
+            title=dict(text='Avg Demand (MWh)', font=dict(color='#58a6ff')),
+            tickfont=dict(color='#58a6ff')
+        ),
+        yaxis2=dict(
+            title=dict(text='Avg Price ($/MWh)', font=dict(color='#f85149')),
+            tickfont=dict(color='#f85149'),
+            overlaying='y',
+            side='right'
+        ),
+        barmode='group',
+        height=400,
+        template='plotly_dark'
+    )
+    
+    st.plotly_chart(fig3, use_container_width=True)
     
