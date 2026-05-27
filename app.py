@@ -360,7 +360,7 @@ if data_ok:
     # - PART 2: Prediction Graph -
     st.header("Prediction Output")
  
-    tab1 = st.tabs(["Actual vs Predicted", "Demand Over Time"])
+    tab1, = st.tabs(["Actual vs Predicted"])
  
     with tab1:
         fig1 = go.Figure()
