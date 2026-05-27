@@ -285,7 +285,7 @@ def train_model(df, model_name):
  
 # - App layout -
 st.title("NZ Energy Demand Predictor")
-st.caption("Weather-driven electricity demand prediction for New Zealand - Auckland, Wellington, Christchurch")
+st.caption("Weather-driven electricity demand prediction for New Zealand")
 st.divider()
  
 # Load data
@@ -306,11 +306,11 @@ if data_ok:
     MODEL_INFO = {
         "Time Lagged Prediction": {
             "desc": "Prediction of residual using Linear Regression.",
-            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, ECT",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
         },
         "SVR": {
             "desc": "Prediction of residual using SVR.",
-            "features": "Polynomial expansion of weather + time features",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
         },
         "KNN (k=10, scaled)": {
             "desc": "Prediction of residual using K-Nearest Neighbours Regression.",
@@ -318,15 +318,15 @@ if data_ok:
         },
         "Random Forest Regressor": {
             "desc": "Prediction of residual using Random Forest Regression.",
-            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
         },
         "Neural Network Regressor": {
             "desc": "Prediction of residual using Neural Network Regression Feed Foward.",
-            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
         },
         "Histogram Gradient Boosting Regressor": {
             "desc": "Prediction of residual using Neural Network Regression Feed Foward.",
-            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
         }
     }
  
@@ -360,7 +360,7 @@ if data_ok:
     # - PART 2: Prediction Graph -
     st.header("Prediction Output")
  
-    tab1, tab2 = st.tabs(["Actual vs Predicted", "Demand Over Time"])
+    tab1 = st.tabs(["Actual vs Predicted", "Demand Over Time"])
  
     with tab1:
         fig1 = go.Figure()
@@ -388,36 +388,6 @@ if data_ok:
             legend=dict(bgcolor="#161b22", bordercolor="#30363d"),
         )
         st.plotly_chart(fig1, use_container_width=True)
- 
-    with tab2:
-        # Show full time-series with rolling average
-        df_plot = df.copy().sort_index()
-        df_plot["rolling_7d"] = df_plot["demand"].rolling(7).mean()
- 
-        fig2 = go.Figure()
-        fig2.add_trace(go.Scatter(
-            x=df_plot.index, y=df_plot["demand"],
-            mode="lines",
-            line=dict(color="#58a6ff", width=1),
-            opacity=0.4,
-            name="Daily Demand",
-        ))
-        fig2.add_trace(go.Scatter(
-            x=df_plot.index, y=df_plot["rolling_7d"],
-            mode="lines",
-            line=dict(color="#3fb950", width=2),
-            name="7-Day Average",
-        ))
-        fig2.update_layout(
-            title="Daily Electricity Demand with 7-Day Rolling Average",
-            xaxis_title="Date",
-            yaxis_title="Demand (MWh)",
-            plot_bgcolor="#0e1117",
-            paper_bgcolor="#0e1117",
-            font_color="#e0e0e0",
-            legend=dict(bgcolor="#161b22", bordercolor="#30363d"),
-        )
-        st.plotly_chart(fig2, use_container_width=True)
  
     st.divider()
  
