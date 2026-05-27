@@ -458,7 +458,7 @@ if data_ok:
             x=list(corr_df),
             y=list(corr_df),
             annotation_text=np.around(corr_m.values, decimals=4),
-            colorscale='Spectral'
+            colorscale='Viridis'
         )
         fig.update_layout( 
             title="Correlation Matrix", 
