@@ -360,7 +360,7 @@ if data_ok:
     # - PART 2: Prediction Graph -
     st.header("Prediction Output")
  
-    tab1, = st.tabs(["Actual vs Predicted"])
+    tab1, tab2 = st.tabs(["Actual vs Predicted", "Predicted and Actual Over Time"])
  
     with tab1:
         fig1 = go.Figure()
@@ -388,7 +388,40 @@ if data_ok:
             legend=dict(bgcolor="#161b22", bordercolor="#30363d"),
         )
         st.plotly_chart(fig1, use_container_width=True)
- 
+    with tab2:
+        y_actual_aligned = df.loc[y_test.index].sort_index()
+        y_pred_series = pd.Series(y_pred, index=y_test.index).sort_index()
+
+        fig2 = go.Figure()
+        # Actual demand
+        fig2.add_trace(go.Scatter(
+            x=y_actual_aligned.index, y=y_actual_aligned.demand,
+            mode="lines",
+            line=dict(color="#acf10c", width=1),
+            opacity=0.4,
+            name="Actual Demand",
+        ))
+
+        # Predicted demand
+        fig2.add_trace(go.Scatter(
+            x=y_pred_series.index, y=y_pred_series,
+            mode="lines",
+            line=dict(color="#F83003", width=2),
+            opacity=0.4,
+            name="Predicted Demand",
+        ))
+
+        fig2.update_layout(
+            title=f"Predicted vs Actual Demand Over Time — {chosen}",
+            xaxis_title="Date",
+            yaxis_title="Demand (MWh)",
+            plot_bgcolor="#0e1117",
+            paper_bgcolor="#0e1117",
+            font_color="#e0e0e0",
+            legend=dict(bgcolor="#161b22", bordercolor="#30363d")
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+
     st.divider()
  
     # - PART 3: EDA -
