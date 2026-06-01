@@ -274,7 +274,7 @@ if data_ok:
     col_sel, col_desc = st.columns([1, 2])
  
     MODEL_INFO = {
-        "Time Lagged Prediction": {
+        "Linear Regression": {
             "desc": "Prediction of residual using Linear Regression.",
             "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
         },
@@ -282,7 +282,7 @@ if data_ok:
             "desc": "Prediction of residual using SVR.",
             "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
         },
-        "KNN (k=10, scaled)": {
+        "KNN (k=10)": {
             "desc": "Prediction of residual using K-Nearest Neighbours Regression.",
             "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
         },
