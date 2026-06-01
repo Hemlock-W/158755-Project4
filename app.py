@@ -98,6 +98,9 @@ def get_ect_data():
     ).dt.to_period("M")
     ect = ect[["month", "Data_value"]].rename(columns={"Data_value": "ECT"})
     return ect.groupby("month", as_index=False)["ECT"].sum()  # 1 row per month
+
+
+
 @st.cache_data(show_spinner="Fetching grid data…")
 def get_grid_data():
     # Load all CSV files
@@ -137,7 +140,7 @@ def get_holidays(year):
  
 @st.cache_data(show_spinner="Building dataset…")
 def build_dataset():
-    # Weather for cities (2023-01-01 → 2024-12-31)
+    # Weather for cities (2023-01-01 → 2025-12-31)
     base = "https://archive-api.open-meteo.com/v1/archive"
     urls = {
         "akl": f"{base}?latitude=-36.8485&longitude=174.7633&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
