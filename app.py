@@ -195,7 +195,7 @@ def train_model(df, model_name):
     y_train, y_test = y.iloc[:split], y.iloc[split:]
     model = LinearRegression()
 
-    if model_name == "Time Lagged Prediction":
+    if model_name == "Linear Regression":
         lag_model = LinearRegression()
     elif model_name == "SVR":
         lag_model = Pipeline([
