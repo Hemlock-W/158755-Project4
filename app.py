@@ -137,17 +137,17 @@ def get_holidays(year):
  
 @st.cache_data(show_spinner="Building dataset…")
 def build_dataset():
-    # Weather for 3 cities (2023-01-01 → 2024-12-31)
+    # Weather for cities (2023-01-01 → 2024-12-31)
     base = "https://archive-api.open-meteo.com/v1/archive"
     urls = {
-        "akl": f"{base}?latitude=-36.8485&longitude=174.7633&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
-        "wlg": f"{base}?latitude=-41.2865&longitude=174.7762&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
-        "chc": f"{base}?latitude=-43.5321&longitude=172.6362&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
-        "ham": f"{base}?latitude=-37.7870&longitude=175.2793&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
-        "tau": f"{base}?latitude=-37.6878&longitude=176.1651&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
-        "dun": f"{base}?latitude=-45.8788&longitude=170.5028&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
-        "qtn": f"{base}?latitude=-45.0312&longitude=168.6626&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
-        "rot": f"{base}?latitude=-38.1368&longitude=176.2497&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "akl": f"{base}?latitude=-36.8485&longitude=174.7633&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "wlg": f"{base}?latitude=-41.2865&longitude=174.7762&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "chc": f"{base}?latitude=-43.5321&longitude=172.6362&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "ham": f"{base}?latitude=-37.7870&longitude=175.2793&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "tau": f"{base}?latitude=-37.6878&longitude=176.1651&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "dun": f"{base}?latitude=-45.8788&longitude=170.5028&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "qtn": f"{base}?latitude=-45.0312&longitude=168.6626&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "rot": f"{base}?latitude=-38.1368&longitude=176.2497&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
     }
 
 
@@ -171,20 +171,20 @@ def build_dataset():
     # Set trading date as index in descending order
     df_elec.drop(['TP49', 'TP50'], axis=1, inplace=True)
     # NAN value will be the value of previous date
-    df_elec = df_elec.bfill()
+    df_elec = df_elec.ffill()
     tp_cols = [col for col in df_elec.columns if col.startswith("TP")]
     df_elec["daily_total"] = df_elec[tp_cols].sum(axis=1, skipna=True)
     df_daily = df_elec.groupby("date")["daily_total"].sum().reset_index()
     df_daily.rename(columns={"daily_total": "demand"}, inplace=True)
  
     # Holidays
-    df_holidays = pd.concat([get_holidays(y) for y in [2023, 2024]], ignore_index=True)
+    df_holidays = pd.concat([get_holidays(y) for y in [2023, 2024, 2025]], ignore_index=True)
     df_final = pd.merge(df_daily, df_weather, on="date", how="inner")
     df_final["is_holiday"] = df_final["date"].dt.date.isin( df_holidays["date"].dt.date ).astype(int)
     df_final["month"]      = df_final["date"].dt.month
     df_final["dayofweek"]  = df_final["date"].dt.dayofweek
  
-    # ── ECT: one monthly value repeated for every day in that month ───────────
+    # ECT: one monthly value repeated for every day in that month
     df_ect = get_ect_data()
     df_final["month_period"] = pd.to_datetime(df_final["date"]).dt.to_period("M")
     df_ect = df_ect.rename(columns={"month": "month_period"})
