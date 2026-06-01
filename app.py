@@ -46,6 +46,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
  
 # - Helpers -
+@st.cache_data(show_spinner="Fetching pricing data…")
+def get_pricing_data():
+       pricing = pd.read_csv("archive/Wholesale_price_trends_20260524152740.csv", skiprows=11)
+       pricing['date'] = pd.to_datetime(pricing['Period start'], format='%d/%m/%Y')
+       pricing = pricing[['date', 'Price ($/MWh)']].rename(columns={'Price ($/MWh)': 'price'})
+       pricing = pricing[pricing['date'] >= '2023-01-01']
+       return pricing
+
 @st.cache_data(show_spinner="Fetching ECT data…")
 def get_ect_data():
     ect = pd.read_csv("archive/electronic-card-transactions-january-2026-csv-tables.csv")
@@ -162,6 +170,13 @@ def build_dataset():
     df_final.drop(columns=["month_period"], inplace=True)
     
     df_final["ECT"] = df_final["ECT"].ffill().bfill()
+
+    # ── PRICING: daily price for each day (BEFORE setting index!) ──────────────
+    df_pricing = get_pricing_data()
+    df_final = df_final.merge(df_pricing, on="date", how="left")
+    df_final["price"] = df_final["price"].ffill().bfill()
+
+
     df_final.set_index("date", inplace=True)
     df_final.sort_index(ascending=True, inplace=True)
     return df_final
@@ -186,7 +201,7 @@ def make_lag_features(series, lags=[1, 2, 3, 7]):
 
  
 def train_model(df, model_name):
-    features = ["temp_max_avg", "temp_min_avg", "rain_avg", "is_holiday", "month", "dayofweek", "ECT"]
+    features = ["temp_max_avg", "temp_min_avg", "rain_avg", "is_holiday", "month", "dayofweek", "ECT", "price"]
     X = df[features]
     y = df["demand"]
 
@@ -276,27 +291,27 @@ if data_ok:
     MODEL_INFO = {
         "Linear Regression": {
             "desc": "Prediction of residual using Linear Regression.",
-            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
         "SVR": {
             "desc": "Prediction of residual using SVR.",
-            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
         "KNN (k=10)": {
             "desc": "Prediction of residual using K-Nearest Neighbours Regression.",
-            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
         "Random Forest Regressor": {
             "desc": "Prediction of residual using Random Forest Regression.",
-            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
         "Neural Network Regressor": {
             "desc": "Prediction of residual using Neural Network Regression Feed Foward.",
-            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
         "Histogram Gradient Boosting Regressor": {
             "desc": "Prediction of residual using Neural Network Regression Feed Foward.",
-            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         }
     }
  
@@ -551,7 +566,7 @@ if data_ok:
     st.header("Dataset")
  
     display_cols = [
-        "demand", "ECT", "temp_max_avg", "temp_min_avg", "rain_avg",
+        "demand","price" ,"ECT", "temp_max_avg", "temp_min_avg", "rain_avg",
         "is_holiday", "month", "dayofweek",
         "temp_max_akl", "temp_min_akl", "rain_akl",
         "temp_max_wlg", "temp_min_wlg", "rain_wlg",
@@ -586,4 +601,138 @@ if data_ok:
     # Summary statistics toggle
     with st.expander("Summary Statistics"):
         st.dataframe(df_show.describe().T.style.format(precision=2), use_container_width=True)
+     # PRICING ANALYSIS
+    
+    st.divider()
+    st.header("Electricity Pricing Analysis")
+    st.caption("Relationship between demand and wholesale electricity prices")
+    
+    # Prepare data for visualization
+    df_viz = df.reset_index()
+    df_viz = df_viz[['date', 'demand', 'price']].dropna()
+    
+    # Summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Avg Price", f"${df_viz['price'].mean():.2f}/MWh")
+    
+    with col2:
+        st.metric("Min Price", f"${df_viz['price'].min():.2f}/MWh")
+    
+    with col3:
+        st.metric("Max Price", f"${df_viz['price'].max():.2f}/MWh")
+    
+    with col4:
+        correlation = df_viz['demand'].corr(df_viz['price'])
+        st.metric("Demand-Price Correlation", f"{correlation:.3f}")
+    
+    # Graph 1: Demand vs Price over time
+    st.subheader("Demand and Price Trends Over Time")
+    
+    fig1 = go.Figure()
+    
+    # demand line
+    fig1.add_trace(go.Scatter(
+        x=df_viz['date'],
+        y=df_viz['demand'],
+        name='Demand (MWh)',
+        line=dict(color='#58a6ff', width=2),
+        yaxis='y1'
+    ))
+    
+    # price line
+    fig1.add_trace(go.Scatter(
+        x=df_viz['date'],
+        y=df_viz['price'],
+        name='Price ($/MWh)',
+        line=dict(color='#f85149', width=2),
+        yaxis='y2'
+    ))
+    
+    fig1.update_layout(
+        xaxis=dict(title='Date'),
+        yaxis=dict(
+            title=dict(text='Demand (MWh)', font=dict(color='#58a6ff')),
+            tickfont=dict(color='#58a6ff')
+        ),
+        yaxis2=dict(
+            title=dict(text='Price ($/MWh)', font=dict(color='#f85149')),
+            tickfont=dict(color='#f85149'),
+            overlaying='y',
+            side='right'
+        ),
+        hovermode='x unified',
+        height=500,
+        template='plotly_dark'
+    )
+    
+    st.plotly_chart(fig1, use_container_width=True)
+    
+    # Graph 2: Scatter plot - Demand vs Price
+    st.subheader("Demand-Price Relationship")
+    
+    fig2 = px.scatter(
+        df_viz,
+        x='demand',
+        y='price',
+        trendline='ols',
+        labels={'demand': 'Demand (MWh)', 'price': 'Price ($/MWh)'},
+        template='plotly_dark'
+    )
+    
+    fig2.update_traces(marker=dict(size=5, opacity=0.6, color='#58a6ff'))
+    fig2.update_layout(height=500)
+    
+    st.plotly_chart(fig2, use_container_width=True)
+    
+    
+    # Monthly analysis
+    st.subheader("Monthly Average Analysis")
+    
+    df_viz['month_name'] = pd.to_datetime(df_viz['date']).dt.strftime('%b %Y')
+    monthly_avg = df_viz.groupby('month_name').agg({
+        'demand': 'mean',
+        'price': 'mean'
+    }).reset_index()
+    
+    # Only showing last 12 months
+    monthly_avg = monthly_avg.tail(12)
+    
+    fig3 = go.Figure()
+    
+    fig3.add_trace(go.Bar(
+        x=monthly_avg['month_name'],
+        y=monthly_avg['demand'],
+        name='Avg Demand',
+        marker_color='#58a6ff',
+        yaxis='y1'
+    ))
+    
+    fig3.add_trace(go.Bar(
+        x=monthly_avg['month_name'],
+        y=monthly_avg['price'],
+        name='Avg Price',
+        marker_color='#f85149',
+        yaxis='y2'
+    ))
+    
+    fig3.update_layout(
+        xaxis=dict(title='Month'),
+        yaxis=dict(
+            title=dict(text='Avg Demand (MWh)', font=dict(color='#58a6ff')),
+            tickfont=dict(color='#58a6ff')
+        ),
+        yaxis2=dict(
+            title=dict(text='Avg Price ($/MWh)', font=dict(color='#f85149')),
+            tickfont=dict(color='#f85149'),
+            overlaying='y',
+            side='right'
+        ),
+        barmode='group',
+        height=400,
+        template='plotly_dark'
+    )
+    
+    st.plotly_chart(fig3, use_container_width=True)
     
