@@ -30,23 +30,6 @@ st.set_page_config(
 # - Dark theme CSS -
 st.markdown("""
 <style>
-    /* Main background */
-    .stApp { background-color: #0e1117; color: #969696; }
- 
-    /* Sidebar */
-    section[data-testid="stSidebar"] { background-color: #161b22; }
- 
-    /* Cards / metric containers */
-    div[data-testid="metric-container"] {
-        background-color: #1c2230;
-        border: 1px solid #30363d;
-        border-radius: 10px;
-        padding: 12px 18px;
-    }
- 
-    /* Section headers */
-    h1, h2, h3 { color: #58a6ff; }
- 
     /* Dividers */
     hr { border-color: #30363d; }
  
@@ -59,22 +42,6 @@ st.markdown("""
  
     /* DataFrames */
     .stDataFrame { background-color: #161b22; }
- 
-    /* Buttons */
-    .stButton > button {
-        background-color: #238636;
-        color: white;
-        border: none;
-        border-radius: 6px;
-        font-weight: 600;
-    }
-    .stButton > button:hover { background-color: #2ea043; }
-    
-    /* Markdown https://nz.pinterest.com/pin/color-palette-for-black-backgrounds--289497082311303940/ */
-    .stMarkdown {color: #969696;}
-    
-    /* Info / warning boxes */
-    .stAlert { background-color: #1c2230; border-color: #30363d; }
 </style>
 """, unsafe_allow_html=True)
  
@@ -86,7 +53,6 @@ def get_pricing_data():
        pricing = pricing[['date', 'Price ($/MWh)']].rename(columns={'Price ($/MWh)': 'price'})
        pricing = pricing[pricing['date'] >= '2023-01-01']
        return pricing
-
 
 @st.cache_data(show_spinner="Fetching ECT data…")
 def get_ect_data():
@@ -107,6 +73,8 @@ def get_ect_data():
     ).dt.to_period("M")
     ect = ect[["month", "Data_value"]].rename(columns={"Data_value": "ECT"})
     return ect.groupby("month", as_index=False)["ECT"].sum()  # 1 row per month
+
+
 
 @st.cache_data(show_spinner="Fetching grid data…")
 def get_grid_data():
@@ -147,17 +115,17 @@ def get_holidays(year):
  
 @st.cache_data(show_spinner="Building dataset…")
 def build_dataset():
-    # Weather for 3 cities (2023-01-01 → 2024-12-31)
+    # Weather for cities (2023-01-01 → 2025-12-31)
     base = "https://archive-api.open-meteo.com/v1/archive"
     urls = {
-        "akl": f"{base}?latitude=-36.8485&longitude=174.7633&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
-        "wlg": f"{base}?latitude=-41.2865&longitude=174.7762&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
-        "chc": f"{base}?latitude=-43.5321&longitude=172.6362&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
-        "ham": f"{base}?latitude=-37.7870&longitude=175.2793&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
-        "tau": f"{base}?latitude=-37.6878&longitude=176.1651&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
-        "dun": f"{base}?latitude=-45.8788&longitude=170.5028&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
-        "qtn": f"{base}?latitude=-45.0312&longitude=168.6626&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
-        "rot": f"{base}?latitude=-38.1368&longitude=176.2497&start_date=2023-01-01&end_date=2024-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "akl": f"{base}?latitude=-36.8485&longitude=174.7633&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "wlg": f"{base}?latitude=-41.2865&longitude=174.7762&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "chc": f"{base}?latitude=-43.5321&longitude=172.6362&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "ham": f"{base}?latitude=-37.7870&longitude=175.2793&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "tau": f"{base}?latitude=-37.6878&longitude=176.1651&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "dun": f"{base}?latitude=-45.8788&longitude=170.5028&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "qtn": f"{base}?latitude=-45.0312&longitude=168.6626&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
+        "rot": f"{base}?latitude=-38.1368&longitude=176.2497&start_date=2023-01-01&end_date=2025-12-31&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=Pacific/Auckland",
     }
 
 
@@ -181,26 +149,26 @@ def build_dataset():
     # Set trading date as index in descending order
     df_elec.drop(['TP49', 'TP50'], axis=1, inplace=True)
     # NAN value will be the value of previous date
-    df_elec = df_elec.bfill()
+    df_elec = df_elec.ffill()
     tp_cols = [col for col in df_elec.columns if col.startswith("TP")]
     df_elec["daily_total"] = df_elec[tp_cols].sum(axis=1, skipna=True)
     df_daily = df_elec.groupby("date")["daily_total"].sum().reset_index()
     df_daily.rename(columns={"daily_total": "demand"}, inplace=True)
  
     # Holidays
-    df_holidays = pd.concat([get_holidays(y) for y in [2023, 2024]], ignore_index=True)
+    df_holidays = pd.concat([get_holidays(y) for y in [2023, 2024, 2025]], ignore_index=True)
     df_final = pd.merge(df_daily, df_weather, on="date", how="inner")
     df_final["is_holiday"] = df_final["date"].dt.date.isin( df_holidays["date"].dt.date ).astype(int)
     df_final["month"]      = df_final["date"].dt.month
     df_final["dayofweek"]  = df_final["date"].dt.dayofweek
  
-    # ── ECT: one monthly value repeated for every day in that month ───────────
+    # ECT: one monthly value repeated for every day in that month
     df_ect = get_ect_data()
     df_final["month_period"] = pd.to_datetime(df_final["date"]).dt.to_period("M")
     df_ect = df_ect.rename(columns={"month": "month_period"})
     df_final = df_final.merge(df_ect, on="month_period", how="left")
     df_final.drop(columns=["month_period"], inplace=True)
-
+    
     df_final["ECT"] = df_final["ECT"].ffill().bfill()
 
     # ── PRICING: daily price for each day (BEFORE setting index!) ──────────────
@@ -208,7 +176,7 @@ def build_dataset():
     df_final = df_final.merge(df_pricing, on="date", how="left")
     df_final["price"] = df_final["price"].ffill().bfill()
 
-    # NOW set index (after all merges are done)
+
     df_final.set_index("date", inplace=True)
     df_final.sort_index(ascending=True, inplace=True)
     return df_final
@@ -240,8 +208,37 @@ def train_model(df, model_name):
     split = int(len(X) * 0.8) # No future data leaks
     X_train, X_test = X.iloc[:split], X.iloc[split:]
     y_train, y_test = y.iloc[:split], y.iloc[split:]
-    
     model = LinearRegression()
+
+    if model_name == "Linear Regression":
+        lag_model = LinearRegression()
+    elif model_name == "SVR":
+        lag_model = Pipeline([
+            ("scalar", StandardScaler()),
+            ("svr", SVR(kernel="rbf", C=100, epsilon=0.01))
+        ])
+    elif model_name == "KNN (k=10, scaled)":
+        model = lag_model = Pipeline([
+            ("scalar", StandardScaler()),
+            ("knn", KNeighborsRegressor(n_neighbors=10))
+        ])
+    elif model_name == "Random Forest Regressor":
+        model = lag_model = Pipeline([
+            ("rf", RandomForestRegressor(n_estimators=100, random_state=42))
+        ])
+    elif model_name == "Neural Network Regressor":
+        lag_model = Pipeline([
+            ("scalar", StandardScaler()),
+            ("mlp", MLPRegressor(hidden_layer_sizes=(150, 50, 10), activation='relu', 
+                                solver='adam', max_iter=300))
+        ])
+    elif model_name == "Histogram Gradient Boosting Regressor":
+        model = lag_model = Pipeline([
+            ("scalar", StandardScaler()),
+            ("hgbr", HistGradientBoostingRegressor(learning_rate=0.01, max_iter=200, max_depth=50))
+        ])
+    
+    
     model.fit(X_train, y_train)
     train_model_predict = pd.Series(model.predict(X_train), index=y_train.index)
     residuals = y_train - train_model_predict
@@ -252,34 +249,6 @@ def train_model(df, model_name):
     X_lag = lag_df.drop(columns=["residual"])
     y_lag = lag_df["residual"]
 
-
-    if model_name == "Time Lagged Prediction":
-        lag_model = LinearRegression()
-    elif model_name == "SVR":
-        lag_model = Pipeline([
-            ("scalar", StandardScaler()),
-            ("svr", SVR(kernel="rbf", C=100, epsilon=0.01))
-        ])
-    elif model_name == "KNN (k=10, scaled)":
-        lag_model = Pipeline([
-            ("scalar", StandardScaler()),
-            ("knn", KNeighborsRegressor(n_neighbors=10))
-        ])
-    elif model_name == "Random Forest Regressor":
-        lag_model = Pipeline([
-            ("rf", RandomForestRegressor(n_estimators=100, random_state=42))
-        ])
-    elif model_name == "Neural Network Regressor":
-        lag_model = Pipeline([
-            ("scalar", StandardScaler()),
-            ("mlp", MLPRegressor(hidden_layer_sizes=(150, 50, 10), activation='relu', 
-                                solver='adam', max_iter=300))
-        ])
-    elif model_name == "Histogram Gradient Boosting Regressor":
-        lag_model = Pipeline([
-            ("scalar", StandardScaler()),
-            ("mlp", HistGradientBoostingRegressor(learning_rate=0.01, max_iter=200, max_depth=50))
-        ])
  
     test_model_predict = pd.Series(model.predict(X_test), index=y_test.index)
     combined_residuals = pd.concat([residuals, y_test-test_model_predict])
@@ -301,7 +270,7 @@ def train_model(df, model_name):
  
 # - App layout -
 st.title("NZ Energy Demand Predictor")
-st.caption("Weather-driven electricity demand prediction for New Zealand - Auckland, Wellington, Christchurch")
+st.caption("Weather-driven electricity demand prediction for New Zealand")
 st.divider()
  
 # Load data
@@ -320,29 +289,29 @@ if data_ok:
     col_sel, col_desc = st.columns([1, 2])
  
     MODEL_INFO = {
-        "Time Lagged Prediction": {
+        "Linear Regression": {
             "desc": "Prediction of residual using Linear Regression.",
-            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, ECT, price",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
         "SVR": {
             "desc": "Prediction of residual using SVR.",
-            "features": "Polynomial expansion of weather + time features",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
-        "KNN (k=10, scaled)": {
+        "KNN (k=10)": {
             "desc": "Prediction of residual using K-Nearest Neighbours Regression.",
             "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
         "Random Forest Regressor": {
             "desc": "Prediction of residual using Random Forest Regression.",
-            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
         "Neural Network Regressor": {
             "desc": "Prediction of residual using Neural Network Regression Feed Foward.",
-            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
         "Histogram Gradient Boosting Regressor": {
             "desc": "Prediction of residual using Neural Network Regression Feed Foward.",
-            "features": "Scaled: temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
+            "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         }
     }
  
@@ -365,7 +334,7 @@ if data_ok:
     # Metrics row
     m1, m2, m3 = st.columns(3)
     m1.metric("Model", chosen)
-    m2.metric("RMSE", f"{rmse:,.2f} MWh")
+    m2.metric("RMSE", f"{rmse:,.2f} kWh")
     m3.metric("R² Score", f"{r2:.4f}")
     m1, m2, m3 = st.columns(3)
     m1.metric("Mean Absolute Error", f"{mae:.2f}")
@@ -376,7 +345,7 @@ if data_ok:
     # - PART 2: Prediction Graph -
     st.header("Prediction Output")
  
-    tab1, tab2 = st.tabs(["Actual vs Predicted", "Demand Over Time"])
+    tab1, tab2 = st.tabs(["Actual vs Predicted", "Predicted and Actual Over Time"])
  
     with tab1:
         fig1 = go.Figure()
@@ -404,37 +373,40 @@ if data_ok:
             legend=dict(bgcolor="#161b22", bordercolor="#30363d"),
         )
         st.plotly_chart(fig1, use_container_width=True)
- 
     with tab2:
-        # Show full time-series with rolling average
-        df_plot = df.copy().sort_index()
-        df_plot["rolling_7d"] = df_plot["demand"].rolling(7).mean()
- 
+        y_actual_aligned = df.loc[y_test.index].sort_index()
+        y_pred_series = pd.Series(y_pred, index=y_test.index).sort_index()
+
         fig2 = go.Figure()
+        # Actual demand
         fig2.add_trace(go.Scatter(
-            x=df_plot.index, y=df_plot["demand"],
+            x=y_actual_aligned.index, y=y_actual_aligned.demand,
             mode="lines",
-            line=dict(color="#58a6ff", width=1),
+            line=dict(color="#acf10c", width=1),
             opacity=0.4,
-            name="Daily Demand",
+            name="Actual Demand",
         ))
+
+        # Predicted demand
         fig2.add_trace(go.Scatter(
-            x=df_plot.index, y=df_plot["rolling_7d"],
+            x=y_pred_series.index, y=y_pred_series,
             mode="lines",
-            line=dict(color="#3fb950", width=2),
-            name="7-Day Average",
+            line=dict(color="#F83003", width=2),
+            opacity=0.4,
+            name="Predicted Demand",
         ))
+
         fig2.update_layout(
-            title="Daily Electricity Demand with 7-Day Rolling Average",
+            title=f"Predicted vs Actual Demand Over Time — {chosen}",
             xaxis_title="Date",
             yaxis_title="Demand (MWh)",
             plot_bgcolor="#0e1117",
             paper_bgcolor="#0e1117",
             font_color="#e0e0e0",
-            legend=dict(bgcolor="#161b22", bordercolor="#30363d"),
+            legend=dict(bgcolor="#161b22", bordercolor="#30363d")
         )
         st.plotly_chart(fig2, use_container_width=True)
- 
+
     st.divider()
  
     # - PART 3: EDA -
@@ -504,7 +476,7 @@ if data_ok:
             x=list(corr_df),
             y=list(corr_df),
             annotation_text=np.around(corr_m.values, decimals=4),
-            colorscale='Spectral'
+            colorscale='Viridis'
         )
         fig.update_layout( 
             title="Correlation Matrix", 
@@ -594,7 +566,7 @@ if data_ok:
     st.header("Dataset")
  
     display_cols = [
-        "demand", "ECT", "price", "temp_max_avg", "temp_min_avg", "rain_avg",
+        "demand","price" ,"ECT", "temp_max_avg", "temp_min_avg", "rain_avg",
         "is_holiday", "month", "dayofweek",
         "temp_max_akl", "temp_min_akl", "rain_akl",
         "temp_max_wlg", "temp_min_wlg", "rain_wlg",
@@ -629,9 +601,7 @@ if data_ok:
     # Summary statistics toggle
     with st.expander("Summary Statistics"):
         st.dataframe(df_show.describe().T.style.format(precision=2), use_container_width=True)
-
-
-    # PRICING ANALYSIS
+     # PRICING ANALYSIS
     
     st.divider()
     st.header("Electricity Pricing Analysis")
