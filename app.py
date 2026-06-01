@@ -30,23 +30,6 @@ st.set_page_config(
 # - Dark theme CSS -
 st.markdown("""
 <style>
-    /* Main background */
-    .stApp { background-color: #0e1117; color: #969696; }
- 
-    /* Sidebar */
-    section[data-testid="stSidebar"] { background-color: #161b22; }
- 
-    /* Cards / metric containers */
-    div[data-testid="metric-container"] {
-        background-color: #1c2230;
-        border: 1px solid #30363d;
-        border-radius: 10px;
-        padding: 12px 18px;
-    }
- 
-    /* Section headers */
-    h1, h2, h3 { color: #58a6ff; }
- 
     /* Dividers */
     hr { border-color: #30363d; }
  
@@ -59,22 +42,6 @@ st.markdown("""
  
     /* DataFrames */
     .stDataFrame { background-color: #161b22; }
- 
-    /* Buttons */
-    .stButton > button {
-        background-color: #238636;
-        color: white;
-        border: none;
-        border-radius: 6px;
-        font-weight: 600;
-    }
-    .stButton > button:hover { background-color: #2ea043; }
-    
-    /* Markdown https://nz.pinterest.com/pin/color-palette-for-black-backgrounds--289497082311303940/ */
-    .stMarkdown {color: #969696;}
-    
-    /* Info / warning boxes */
-    .stAlert { background-color: #1c2230; border-color: #30363d; }
 </style>
 """, unsafe_allow_html=True)
  
@@ -352,7 +319,7 @@ if data_ok:
     # Metrics row
     m1, m2, m3 = st.columns(3)
     m1.metric("Model", chosen)
-    m2.metric("RMSE", f"{rmse:,.2f} MWh")
+    m2.metric("RMSE", f"{rmse:,.2f} kWh")
     m3.metric("R² Score", f"{r2:.4f}")
     m1, m2, m3 = st.columns(3)
     m1.metric("Mean Absolute Error", f"{mae:.2f}")
