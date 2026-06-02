@@ -397,11 +397,13 @@ if data_ok:
     # - PART 3: EDA -
     st.header("Exploratory Data Analysis")
  
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Electricity Demand Over Time", 
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["Electricity Demand Over Time", 
                             "Scatter Plot Matrix", "Correlation Matrix", 
                             "Distribution of Electricity Demand",
                             "Temperature vs Electricity Demand",
-                            "Holiday vs Non-Holiday"])
+                            "Holiday vs Non-Holiday",
+                            "Demand Clusters",
+                            "ECT vs Demand"])
  
     with tab1:
         # Show full time-series with rolling average
@@ -544,6 +546,117 @@ if data_ok:
             legend=dict(bgcolor="#161b22", bordercolor="#30363d")
         )
         st.plotly_chart(fig, use_container_width=True)
+        # ...existing tabs unchanged...
+
+    with tab7:
+        from sklearn.cluster import KMeans
+        from sklearn.preprocessing import StandardScaler as _SS
+
+        cluster_features = ["temp_min_avg", "temp_max_avg", "rain_avg",
+                            "ECT", "demand", "dayofweek", "is_holiday", "month"]
+        k = st.slider("Number of clusters (k)", 2, 6, 3, key="cluster_k")
+
+        X_cl = df[cluster_features].dropna()
+        X_scaled = _SS().fit_transform(X_cl)
+        labels_cl = KMeans(n_clusters=k, random_state=42, n_init=10).fit_predict(X_scaled)
+        df_cl = X_cl.copy()
+        df_cl["cluster"] = labels_cl.astype(str)
+
+        # Use a qualitative colour sequence so clusters are always visually distinct
+        CLUSTER_COLOURS = ["#58a6ff", "#f78166", "#3fb950", "#d2a8ff", "#ffa657", "#79c0ff"]
+        colour_map = {str(i): CLUSTER_COLOURS[i] for i in range(k)}
+
+        cl_col1, cl_col2 = st.columns(2)
+        with cl_col1:
+            fig = px.scatter(
+                df_cl, x="temp_min_avg", y="demand",
+                color="cluster",
+                color_discrete_map=colour_map,
+                hover_data=["month", "dayofweek", "is_holiday", "ECT"],
+                title=f"Clusters (k={k}) — Temperature vs Demand",
+            )
+            fig.update_layout(
+                xaxis_title="Avg Min Temperature (°C)", yaxis_title="Demand (kWh)",
+                plot_bgcolor="#0e1117", paper_bgcolor="#0e1117",
+                font_color="#e0e0e0",
+                legend=dict(bgcolor="#161b22", bordercolor="#30363d"),
+            )
+            st.plotly_chart(fig, use_container_width=True, key="eda_clusters_temp")
+
+        with cl_col2:
+            # ECT is monthly — aggregate to one point per month to avoid vertical stripes
+            df_cl_monthly = df_cl.copy()
+            df_cl_monthly.index = df.loc[X_cl.index].index          # restore DatetimeIndex
+            df_cl_monthly["month_label"] = df_cl_monthly.index.to_period("M").astype(str)
+            df_monthly_cl = (
+                df_cl_monthly
+                .groupby("month_label")
+                .agg(ECT=("ECT", "first"), demand=("demand", "mean"),
+                     cluster=("cluster", lambda x: x.mode()[0]))
+                .reset_index()
+            )
+            fig = px.scatter(
+                df_monthly_cl, x="ECT", y="demand",
+                color="cluster",
+                color_discrete_map=colour_map,
+                text="month_label",
+                hover_data=["month_label"],
+                title=f"Clusters (k={k}) — Monthly ECT vs Avg Demand",
+            )
+            fig.update_traces(textposition="top center", textfont=dict(size=8))
+            fig.update_layout(
+                xaxis_title="ECT ($)", yaxis_title="Avg Daily Demand (kWh)",
+                plot_bgcolor="#0e1117", paper_bgcolor="#0e1117",
+                font_color="#e0e0e0",
+                legend=dict(bgcolor="#161b22", bordercolor="#30363d"),
+            )
+            st.plotly_chart(fig, use_container_width=True, key="eda_clusters_ect")
+
+        summary = df_cl.groupby("cluster")[cluster_features].mean().round(2)
+        st.dataframe(summary.style.format(precision=2), use_container_width=True)
+    with tab8:
+        # Aggregate to monthly for a clean dual-axis comparison
+        df_monthly = df.resample("MS").agg(
+            demand=("demand", "mean"),
+            ECT=("ECT", "first"),           # ECT is already one value per month
+        ).reset_index()
+
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=df_monthly["date"], y=df_monthly["ECT"],
+            name="Monthly ECT ($)",
+            marker_color="#f78166",
+            opacity=0.7,
+            yaxis="y2",
+        ))
+        fig.add_trace(go.Scatter(
+            x=df_monthly["date"], y=df_monthly["demand"],
+            mode="lines+markers",
+            line=dict(color="#58a6ff", width=2),
+            marker=dict(size=6),
+            name="Avg Daily Demand (kWh)",
+            yaxis="y1",
+        ))
+        fig.update_layout(
+            title="Monthly ECT Spend vs Average Daily Electricity Demand",
+            xaxis_title="Month",
+            yaxis=dict(title="Avg Daily Demand (kWh)", color="#58a6ff"),
+            yaxis2=dict(title="ECT ($)", color="#f78166",
+                        overlaying="y", side="right"),
+            plot_bgcolor="#0e1117", paper_bgcolor="#0e1117",
+            font_color="#e0e0e0",
+            legend=dict(bgcolor="#161b22", bordercolor="#30363d"),
+            barmode="overlay",
+        )
+        st.plotly_chart(fig, use_container_width=True, key="eda_ect_vs_demand")
+
+        # Pearson correlation callout
+        corr_val = df_monthly["ECT"].corr(df_monthly["demand"])
+        st.metric("Pearson Correlation — ECT vs Monthly Avg Demand", f"{corr_val:.4f}")
+        st.caption(
+            "A positive value means higher consumer card spending months tend to have higher average electricity demand. "
+            "A value near 0 means ECT adds orthogonal information not captured by temperature alone."
+        )
     st.divider()
 
 
