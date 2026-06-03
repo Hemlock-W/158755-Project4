@@ -51,6 +51,7 @@ def get_pricing_data():
        pricing = pd.read_csv("archive/Wholesale_price_trends_20260524152740.csv", skiprows=11)
        pricing['date'] = pd.to_datetime(pricing['Period start'], format='%d/%m/%Y')
        pricing = pricing[['date', 'Price ($/MWh)']].rename(columns={'Price ($/MWh)': 'price'})
+       pricing['price'] = pricing['price'] / 1000  # $/MWh to $/kWh
        pricing = pricing[pricing['date'] >= '2023-01-01']
        return pricing
 
@@ -171,7 +172,7 @@ def build_dataset():
     
     df_final["ECT"] = df_final["ECT"].ffill().bfill()
 
-    # PRICING: daily price for each day (BEFORE setting index!)
+    # ── PRICING: daily price for each day (BEFORE setting index!) ──────────────
     df_pricing = get_pricing_data()
     df_final = df_final.merge(df_pricing, on="date", how="left")
     df_final["price"] = df_final["price"].ffill().bfill()
@@ -297,7 +298,7 @@ if data_ok:
             "desc": "Prediction of residual using SVR.",
             "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
-        "KNN (k=10)": {
+        "KNN (k=10, scaled)": {
             "desc": "Prediction of residual using K-Nearest Neighbours Regression.",
             "features": "temp_max_avg, temp_min_avg, rain_avg, is_holiday, month, dayofweek, ECT, price",
         },
@@ -412,13 +413,14 @@ if data_ok:
     # - PART 3: EDA -
     st.header("Exploratory Data Analysis")
  
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["Electricity Demand Over Time", 
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["Electricity Demand Over Time", 
                             "Scatter Plot Matrix", "Correlation Matrix", 
                             "Distribution of Electricity Demand",
                             "Temperature vs Electricity Demand",
                             "Holiday vs Non-Holiday",
-                            "Demand Clusters",
-                            "ECT vs Demand"])
+                            "Demand and Price Trends",
+                            "Demand-Price Relationship",
+                            "Monthly Average Analysis"])
  
     with tab1:
         # Show full time-series with rolling average
@@ -561,117 +563,85 @@ if data_ok:
             legend=dict(bgcolor="#161b22", bordercolor="#30363d")
         )
         st.plotly_chart(fig, use_container_width=True)
-        # ...existing tabs unchanged...
-
+    
     with tab7:
-        from sklearn.cluster import KMeans
-        from sklearn.preprocessing import StandardScaler as _SS
-
-        cluster_features = ["temp_min_avg", "temp_max_avg", "rain_avg",
-                            "ECT", "demand", "dayofweek", "is_holiday", "month"]
-        k = st.slider("Number of clusters (k)", 2, 6, 3, key="cluster_k")
-
-        X_cl = df[cluster_features].dropna()
-        X_scaled = _SS().fit_transform(X_cl)
-        labels_cl = KMeans(n_clusters=k, random_state=42, n_init=10).fit_predict(X_scaled)
-        df_cl = X_cl.copy()
-        df_cl["cluster"] = labels_cl.astype(str)
-
-        # Use a qualitative colour sequence so clusters are always visually distinct
-        CLUSTER_COLOURS = ["#58a6ff", "#f78166", "#3fb950", "#d2a8ff", "#ffa657", "#79c0ff"]
-        colour_map = {str(i): CLUSTER_COLOURS[i] for i in range(k)}
-
-        cl_col1, cl_col2 = st.columns(2)
-        with cl_col1:
-            fig = px.scatter(
-                df_cl, x="temp_min_avg", y="demand",
-                color="cluster",
-                color_discrete_map=colour_map,
-                hover_data=["month", "dayofweek", "is_holiday", "ECT"],
-                title=f"Clusters (k={k}) — Temperature vs Demand",
-            )
-            fig.update_layout(
-                xaxis_title="Avg Min Temperature (°C)", yaxis_title="Demand (kWh)",
-                plot_bgcolor="#0e1117", paper_bgcolor="#0e1117",
-                font_color="#e0e0e0",
-                legend=dict(bgcolor="#161b22", bordercolor="#30363d"),
-            )
-            st.plotly_chart(fig, use_container_width=True, key="eda_clusters_temp")
-
-        with cl_col2:
-            # ECT is monthly — aggregate to one point per month to avoid vertical stripes
-            df_cl_monthly = df_cl.copy()
-            df_cl_monthly.index = df.loc[X_cl.index].index          # restore DatetimeIndex
-            df_cl_monthly["month_label"] = df_cl_monthly.index.to_period("M").astype(str)
-            df_monthly_cl = (
-                df_cl_monthly
-                .groupby("month_label")
-                .agg(ECT=("ECT", "first"), demand=("demand", "mean"),
-                     cluster=("cluster", lambda x: x.mode()[0]))
-                .reset_index()
-            )
-            fig = px.scatter(
-                df_monthly_cl, x="ECT", y="demand",
-                color="cluster",
-                color_discrete_map=colour_map,
-                text="month_label",
-                hover_data=["month_label"],
-                title=f"Clusters (k={k}) — Monthly ECT vs Avg Demand",
-            )
-            fig.update_traces(textposition="top center", textfont=dict(size=8))
-            fig.update_layout(
-                xaxis_title="ECT ($)", yaxis_title="Avg Daily Demand (kWh)",
-                plot_bgcolor="#0e1117", paper_bgcolor="#0e1117",
-                font_color="#e0e0e0",
-                legend=dict(bgcolor="#161b22", bordercolor="#30363d"),
-            )
-            st.plotly_chart(fig, use_container_width=True, key="eda_clusters_ect")
-
-        summary = df_cl.groupby("cluster")[cluster_features].mean().round(2)
-        st.dataframe(summary.style.format(precision=2), use_container_width=True)
+        st.subheader("Demand and Price Trends Over Time")
+        
+        # Prepare data
+        df_viz = df.reset_index()
+        df_viz = df_viz[['date', 'demand', 'price']].dropna()
+        
+        # Metrics
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Avg Price", f"${df_viz['price'].mean():.4f}/kWh")
+        with col2:
+            st.metric("Min Price", f"${df_viz['price'].min():.4f}/kWh")
+        with col3:
+            st.metric("Max Price", f"${df_viz['price'].max():.4f}/kWh")
+        with col4:
+            correlation = df_viz['demand'].corr(df_viz['price'])
+            st.metric("Correlation", f"{correlation:.3f}")
+        
+        # Time Series Chart
+        fig1 = go.Figure()
+        
+        fig1.add_trace(go.Scatter(
+            x=df_viz['date'], y=df_viz['demand'],
+            name='Demand (kWh)', line=dict(color='#58a6ff', width=2), yaxis='y1'
+        ))
+        fig1.add_trace(go.Scatter(
+            x=df_viz['date'], y=df_viz['price'],
+            name='Price ($/kWh)', line=dict(color='#f85149', width=2), yaxis='y2'
+        ))
+        
+        fig1.update_layout(
+            title="Demand and Price Trends Over Time",
+            xaxis=dict(title='Date'),
+            yaxis=dict(title=dict(text='Demand (kWh)', font=dict(color='#58a6ff')), tickfont=dict(color='#58a6ff')),
+            yaxis2=dict(title=dict(text='Price ($/kWh)', font=dict(color='#f85149')), tickfont=dict(color='#f85149'), overlaying='y', side='right'),
+            hovermode='x unified', height=500, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="#e0e0e0"
+        )
+        st.plotly_chart(fig1, use_container_width=True)
+    
     with tab8:
-        # Aggregate to monthly for a clean dual-axis comparison
-        df_monthly = df.resample("MS").agg(
-            demand=("demand", "mean"),
-            ECT=("ECT", "first"),           # ECT is already one value per month
-        ).reset_index()
-
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
-            x=df_monthly["date"], y=df_monthly["ECT"],
-            name="Monthly ECT ($)",
-            marker_color="#f78166",
-            opacity=0.7,
-            yaxis="y2",
-        ))
-        fig.add_trace(go.Scatter(
-            x=df_monthly["date"], y=df_monthly["demand"],
-            mode="lines+markers",
-            line=dict(color="#58a6ff", width=2),
-            marker=dict(size=6),
-            name="Avg Daily Demand (kWh)",
-            yaxis="y1",
-        ))
-        fig.update_layout(
-            title="Monthly ECT Spend vs Average Daily Electricity Demand",
-            xaxis_title="Month",
-            yaxis=dict(title="Avg Daily Demand (kWh)", color="#58a6ff"),
-            yaxis2=dict(title="ECT ($)", color="#f78166",
-                        overlaying="y", side="right"),
-            plot_bgcolor="#0e1117", paper_bgcolor="#0e1117",
-            font_color="#e0e0e0",
-            legend=dict(bgcolor="#161b22", bordercolor="#30363d"),
-            barmode="overlay",
+        st.subheader("Demand-Price Relationship")
+        
+        df_viz = df.reset_index()
+        df_viz = df_viz[['date', 'demand', 'price']].dropna()
+        
+        fig2 = px.scatter(
+            df_viz, x='demand', y='price', trendline='ols',
+            labels={'demand': 'Demand (kWh)', 'price': 'Price ($/kWh)'},
+            title="Demand vs Price with Trend Line"
         )
-        st.plotly_chart(fig, use_container_width=True, key="eda_ect_vs_demand")
-
-        # Pearson correlation callout
-        corr_val = df_monthly["ECT"].corr(df_monthly["demand"])
-        st.metric("Pearson Correlation — ECT vs Monthly Avg Demand", f"{corr_val:.4f}")
-        st.caption(
-            "A positive value means higher consumer card spending months tend to have higher average electricity demand. "
-            "A value near 0 means ECT adds orthogonal information not captured by temperature alone."
+        fig2.update_traces(marker=dict(size=5, opacity=0.6, color='#58a6ff'))
+        fig2.update_layout(height=500, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="#e0e0e0")
+        st.plotly_chart(fig2, use_container_width=True)
+    
+    with tab9:
+        st.subheader("Monthly Average Analysis")
+        
+        df_viz = df.reset_index()
+        df_viz = df_viz[['date', 'demand', 'price']].dropna()
+        
+        df_viz['month_name'] = pd.to_datetime(df_viz['date']).dt.strftime('%b %Y')
+        monthly_avg = df_viz.groupby('month_name').agg({'demand': 'mean', 'price': 'mean'}).reset_index()
+        monthly_avg = monthly_avg.tail(12)
+        
+        fig3 = go.Figure()
+        fig3.add_trace(go.Bar(x=monthly_avg['month_name'], y=monthly_avg['demand'], name='Avg Demand (kWh)', marker_color='#58a6ff', yaxis='y1'))
+        fig3.add_trace(go.Bar(x=monthly_avg['month_name'], y=monthly_avg['price'], name='Avg Price ($/kWh)', marker_color='#f85149', yaxis='y2'))
+        
+        fig3.update_layout(
+            title="Monthly Average Demand vs Price (Last 12 Months)",
+            xaxis=dict(title='Month'),
+            yaxis=dict(title=dict(text='Avg Demand (kWh)', font=dict(color='#58a6ff')), tickfont=dict(color='#58a6ff')),
+            yaxis2=dict(title=dict(text='Avg Price ($/kWh)', font=dict(color='#f85149')), tickfont=dict(color='#f85149'), overlaying='y', side='right'),
+            barmode='group', height=400, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="#e0e0e0"
         )
+        st.plotly_chart(fig3, use_container_width=True)
+    
     st.divider()
 
 
@@ -714,138 +684,4 @@ if data_ok:
     # Summary statistics toggle
     with st.expander("Summary Statistics"):
         st.dataframe(df_show.describe().T.style.format(precision=2), use_container_width=True)
-     # PRICING ANALYSIS
-    
-    st.divider()
-    st.header("Electricity Pricing Analysis")
-    st.caption("Relationship between demand and wholesale electricity prices")
-    
-    # Prepare data for visualization
-    df_viz = df.reset_index()
-    df_viz = df_viz[['date', 'demand', 'price']].dropna()
-    
-    # Summary metrics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Avg Price", f"${df_viz['price'].mean():.2f}/MWh")
-    
-    with col2:
-        st.metric("Min Price", f"${df_viz['price'].min():.2f}/MWh")
-    
-    with col3:
-        st.metric("Max Price", f"${df_viz['price'].max():.2f}/MWh")
-    
-    with col4:
-        correlation = df_viz['demand'].corr(df_viz['price'])
-        st.metric("Demand-Price Correlation", f"{correlation:.3f}")
-    
-    # Graph 1: Demand vs Price over time
-    st.subheader("Demand and Price Trends Over Time")
-    
-    fig1 = go.Figure()
-    
-    # demand line
-    fig1.add_trace(go.Scatter(
-        x=df_viz['date'],
-        y=df_viz['demand'],
-        name='Demand (MWh)',
-        line=dict(color='#58a6ff', width=2),
-        yaxis='y1'
-    ))
-    
-    # price line
-    fig1.add_trace(go.Scatter(
-        x=df_viz['date'],
-        y=df_viz['price'],
-        name='Price ($/MWh)',
-        line=dict(color='#f85149', width=2),
-        yaxis='y2'
-    ))
-    
-    fig1.update_layout(
-        xaxis=dict(title='Date'),
-        yaxis=dict(
-            title=dict(text='Demand (MWh)', font=dict(color='#58a6ff')),
-            tickfont=dict(color='#58a6ff')
-        ),
-        yaxis2=dict(
-            title=dict(text='Price ($/MWh)', font=dict(color='#f85149')),
-            tickfont=dict(color='#f85149'),
-            overlaying='y',
-            side='right'
-        ),
-        hovermode='x unified',
-        height=500,
-        template='plotly_dark'
-    )
-    
-    st.plotly_chart(fig1, use_container_width=True)
-    
-    # Graph 2: Scatter plot - Demand vs Price
-    st.subheader("Demand-Price Relationship")
-    
-    fig2 = px.scatter(
-        df_viz,
-        x='demand',
-        y='price',
-        trendline='ols',
-        labels={'demand': 'Demand (MWh)', 'price': 'Price ($/MWh)'},
-        template='plotly_dark'
-    )
-    
-    fig2.update_traces(marker=dict(size=5, opacity=0.6, color='#58a6ff'))
-    fig2.update_layout(height=500)
-    
-    st.plotly_chart(fig2, use_container_width=True)
-    
-    
-    # Monthly analysis
-    st.subheader("Monthly Average Analysis")
-    
-    df_viz['month_name'] = pd.to_datetime(df_viz['date']).dt.strftime('%b %Y')
-    monthly_avg = df_viz.groupby('month_name').agg({
-        'demand': 'mean',
-        'price': 'mean'
-    }).reset_index()
-    
-    # Only showing last 12 months
-    monthly_avg = monthly_avg.tail(12)
-    
-    fig3 = go.Figure()
-    
-    fig3.add_trace(go.Bar(
-        x=monthly_avg['month_name'],
-        y=monthly_avg['demand'],
-        name='Avg Demand',
-        marker_color='#58a6ff',
-        yaxis='y1'
-    ))
-    
-    fig3.add_trace(go.Bar(
-        x=monthly_avg['month_name'],
-        y=monthly_avg['price'],
-        name='Avg Price',
-        marker_color='#f85149',
-        yaxis='y2'
-    ))
-    
-    fig3.update_layout(
-        xaxis=dict(title='Month'),
-        yaxis=dict(
-            title=dict(text='Avg Demand (MWh)', font=dict(color='#58a6ff')),
-            tickfont=dict(color='#58a6ff')
-        ),
-        yaxis2=dict(
-            title=dict(text='Avg Price ($/MWh)', font=dict(color='#f85149')),
-            tickfont=dict(color='#f85149'),
-            overlaying='y',
-            side='right'
-        ),
-        barmode='group',
-        height=400,
-        template='plotly_dark'
-    )
-    
-    st.plotly_chart(fig3, use_container_width=True)
     
