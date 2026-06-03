@@ -454,7 +454,7 @@ if data_ok:
             font_color="#e0e0e0",
             legend=dict(bgcolor="#161b22", bordercolor="#30363d"),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="tab1_demand_time")
  
     with tab2:
         temp_precip = df[[
@@ -472,7 +472,7 @@ if data_ok:
             font_color="#e0e0e0",
             legend=dict(bgcolor="#161b22", bordercolor="#30363d")
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="tab2_scatter_matrix")
     
     with tab3:
         corr_df = df[[
@@ -494,7 +494,7 @@ if data_ok:
             font_color="#e0e0e0",
             legend=dict(bgcolor="#161b22", bordercolor="#30363d")
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="tab3_correlation")
 
     with tab4:
         fig = go.Figure()
@@ -531,7 +531,7 @@ if data_ok:
             barmode='overlay',
             template="plotly_white"
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="tab4_distribution")
 
     with tab5:
         fig = px.scatter(
@@ -547,7 +547,7 @@ if data_ok:
             font_color="#e0e0e0",
             legend=dict(bgcolor="#161b22", bordercolor="#30363d")
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="tab5_temp_demand")
     
     with tab6:
         holiday_avg = df.groupby("is_holiday")["demand"].mean().reset_index()
@@ -567,7 +567,7 @@ if data_ok:
             font_color="#e0e0e0",
             legend=dict(bgcolor="#161b22", bordercolor="#30363d")
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="tab6_holiday")
     
     with tab7:
         st.subheader("Demand and Price Trends Over Time")
@@ -607,7 +607,7 @@ if data_ok:
             yaxis2=dict(title=dict(text='Price ($/kWh)', font=dict(color='#f85149')), tickfont=dict(color='#f85149'), overlaying='y', side='right'),
             hovermode='x unified', height=500, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="#e0e0e0"
         )
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(fig1, use_container_width=True, key="tab7_price_trend")
     
     with tab8:
         st.subheader("Demand-Price Relationship")
@@ -622,7 +622,7 @@ if data_ok:
         )
         fig2.update_traces(marker=dict(size=5, opacity=0.6, color='#58a6ff'))
         fig2.update_layout(height=500, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="#e0e0e0")
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, use_container_width=True, key="tab8_price_rel")
     
     with tab9:
         st.subheader("Monthly Average Analysis")
@@ -645,7 +645,7 @@ if data_ok:
             yaxis2=dict(title=dict(text='Avg Price ($/kWh)', font=dict(color='#f85149')), tickfont=dict(color='#f85149'), overlaying='y', side='right'),
             barmode='group', height=400, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="#e0e0e0"
         )
-        st.plotly_chart(fig3, use_container_width=True)
+        st.plotly_chart(fig3, use_container_width=True, key="tab9_monthly")
     with tab10:
         st.subheader("Demand and Price Trends Over Time")
         
@@ -684,7 +684,7 @@ if data_ok:
             yaxis2=dict(title=dict(text='Price ($/kWh)', font=dict(color='#f85149')), tickfont=dict(color='#f85149'), overlaying='y', side='right'),
             hovermode='x unified', height=500, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="#e0e0e0"
         )
-        st.plotly_chart(fig_price_trend, use_container_width=True)
+        st.plotly_chart(fig_price_trend, use_container_width=True, key="tab10_price_trend")
     
     with tab11:
         st.subheader("Demand-Price Relationship")
@@ -699,7 +699,7 @@ if data_ok:
         )
         fig_price_rel.update_traces(marker=dict(size=5, opacity=0.6, color='#58a6ff'))
         fig_price_rel.update_layout(height=500, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="#e0e0e0")
-        st.plotly_chart(fig_price_rel, use_container_width=True)
+        st.plotly_chart(fig_price_rel, use_container_width=True, key="tab11_price_rel")
     
     with tab12:
         st.subheader("Monthly Average Analysis")
@@ -722,7 +722,7 @@ if data_ok:
             yaxis2=dict(title=dict(text='Avg Price ($/kWh)', font=dict(color='#f85149')), tickfont=dict(color='#f85149'), overlaying='y', side='right'),
             barmode='group', height=400, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="#e0e0e0"
         )
-        st.plotly_chart(fig_avg_demand, use_container_width=True)
+        st.plotly_chart(fig_avg_demand, use_container_width=True, key="tab12_avg_demand")
     st.divider()
 
 
