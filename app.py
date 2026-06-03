@@ -666,25 +666,25 @@ if data_ok:
             st.metric("Correlation", f"{correlation:.3f}")
         
         # Time Series Chart
-        fig1 = go.Figure()
+        fig_price_trend = go.Figure()
         
-        fig1.add_trace(go.Scatter(
+        fig_price_trend.add_trace(go.Scatter(
             x=df_viz['date'], y=df_viz['demand'],
             name='Demand (kWh)', line=dict(color='#58a6ff', width=2), yaxis='y1'
         ))
-        fig1.add_trace(go.Scatter(
+        fig_price_trend.add_trace(go.Scatter(
             x=df_viz['date'], y=df_viz['price'],
             name='Price ($/kWh)', line=dict(color='#f85149', width=2), yaxis='y2'
         ))
         
-        fig1.update_layout(
+        fig_price_trend.update_layout(
             title="Demand and Price Trends Over Time",
             xaxis=dict(title='Date'),
             yaxis=dict(title=dict(text='Demand (kWh)', font=dict(color='#58a6ff')), tickfont=dict(color='#58a6ff')),
             yaxis2=dict(title=dict(text='Price ($/kWh)', font=dict(color='#f85149')), tickfont=dict(color='#f85149'), overlaying='y', side='right'),
             hovermode='x unified', height=500, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="#e0e0e0"
         )
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(fig_price_trend, use_container_width=True)
     
     with tab11:
         st.subheader("Demand-Price Relationship")
@@ -692,14 +692,14 @@ if data_ok:
         df_viz = df.reset_index()
         df_viz = df_viz[['date', 'demand', 'price']].dropna()
         
-        fig2 = px.scatter(
+        fig_price_rel = px.scatter(
             df_viz, x='demand', y='price', trendline='ols',
             labels={'demand': 'Demand (kWh)', 'price': 'Price ($/kWh)'},
             title="Demand vs Price with Trend Line"
         )
-        fig2.update_traces(marker=dict(size=5, opacity=0.6, color='#58a6ff'))
-        fig2.update_layout(height=500, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="#e0e0e0")
-        st.plotly_chart(fig2, use_container_width=True)
+        fig_price_rel.update_traces(marker=dict(size=5, opacity=0.6, color='#58a6ff'))
+        fig_price_rel.update_layout(height=500, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="#e0e0e0")
+        st.plotly_chart(fig_price_rel, use_container_width=True)
     
     with tab12:
         st.subheader("Monthly Average Analysis")
@@ -711,18 +711,18 @@ if data_ok:
         monthly_avg = df_viz.groupby('month_name').agg({'demand': 'mean', 'price': 'mean'}).reset_index()
         monthly_avg = monthly_avg.tail(12)
         
-        fig3 = go.Figure()
-        fig3.add_trace(go.Bar(x=monthly_avg['month_name'], y=monthly_avg['demand'], name='Avg Demand (kWh)', marker_color='#58a6ff', yaxis='y1'))
-        fig3.add_trace(go.Bar(x=monthly_avg['month_name'], y=monthly_avg['price'], name='Avg Price ($/kWh)', marker_color='#f85149', yaxis='y2'))
+        fig_avg_demand = go.Figure()
+        fig_avg_demand.add_trace(go.Bar(x=monthly_avg['month_name'], y=monthly_avg['demand'], name='Avg Demand (kWh)', marker_color='#58a6ff', yaxis='y1'))
+        fig_avg_demand.add_trace(go.Bar(x=monthly_avg['month_name'], y=monthly_avg['price'], name='Avg Price ($/kWh)', marker_color='#f85149', yaxis='y2'))
         
-        fig3.update_layout(
+        fig_avg_demand.update_layout(
             title="Monthly Average Demand vs Price (Last 12 Months)",
             xaxis=dict(title='Month'),
             yaxis=dict(title=dict(text='Avg Demand (kWh)', font=dict(color='#58a6ff')), tickfont=dict(color='#58a6ff')),
             yaxis2=dict(title=dict(text='Avg Price ($/kWh)', font=dict(color='#f85149')), tickfont=dict(color='#f85149'), overlaying='y', side='right'),
             barmode='group', height=400, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="#e0e0e0"
         )
-        st.plotly_chart(fig3, use_container_width=True)
+        st.plotly_chart(fig_avg_demand, use_container_width=True)
     st.divider()
 
 
