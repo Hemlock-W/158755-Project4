@@ -413,10 +413,10 @@ if data_ok:
     # - PART 3: EDA -
     st.header("Exploratory Data Analysis")
  
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
+    tab1, tab2, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
                             "Electricity Demand Over Time", 
                             "Scatter Plot Matrix", 
-                            "Correlation Matrix", 
+                            # "Correlation Matrix", 
                             "Distribution of Electricity Demand",
                             "Temperature vs Electricity Demand",
                             "Holiday vs Non-Holiday",
@@ -473,27 +473,27 @@ if data_ok:
         )
         st.plotly_chart(fig, use_container_width=True, key="tab2_scatter_matrix")
     
-    with tab3:
-        corr_df = df[[
-            "demand",
-            "temp_max_avg", "temp_min_avg", "rain_avg"
-        ]]
-        corr_m = corr_df.corr()
-        fig = ff.create_annotated_heatmap(
-            z=corr_m.values,
-            x=list(corr_df),
-            y=list(corr_df),
-            annotation_text=np.around(corr_m.values, decimals=4),
-            colorscale='Viridis'
-        )
-        fig.update_layout( 
-            title="Correlation Matrix", 
-            plot_bgcolor="#0e1117",
-            paper_bgcolor="#0e1117",
-            font_color="#e0e0e0",
-            legend=dict(bgcolor="#161b22", bordercolor="#30363d")
-        )
-        st.plotly_chart(fig, use_container_width=True, key="tab3_correlation")
+    # with tab3:
+    #     corr_df = df[[
+    #         "demand",
+    #         "temp_max_avg", "temp_min_avg", "rain_avg"
+    #     ]]
+    #     corr_m = corr_df.corr()
+    #     fig = ff.create_annotated_heatmap(
+    #         z=corr_m.values,
+    #         x=list(corr_df),
+    #         y=list(corr_df),
+    #         annotation_text=np.around(corr_m.values, decimals=4),
+    #         colorscale='Viridis'
+    #     )
+    #     fig.update_layout( 
+    #         title="Correlation Matrix", 
+    #         plot_bgcolor="#0e1117",
+    #         paper_bgcolor="#0e1117",
+    #         font_color="#e0e0e0",
+    #         legend=dict(bgcolor="#161b22", bordercolor="#30363d")
+    #     )
+    #     st.plotly_chart(fig, use_container_width=True, key="tab3_correlation")
 
     with tab4:
         fig = go.Figure()
